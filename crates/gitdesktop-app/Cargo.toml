@@ -1,17 +1,17 @@
 [package]
-name = "gito-app"
-description = "Cliente Git de escritorio Gito (interfaz iced)"
+name = "gitdesktop-app"
+description = "Cliente Git de escritorio Git-Desktop Jorgenio (interfaz iced)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "gito"
+name = "git-desktop-jorgenio"
 path = "src/main.rs"
 
 [dependencies]
-gito-core = { workspace = true }
+gitdesktop-core = { workspace = true }
 iced = { workspace = true }
 rfd = { workspace = true }
 time = { workspace = true }

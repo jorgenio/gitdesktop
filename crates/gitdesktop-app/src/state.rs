@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use gito_core::{GitEngine, RepoEntry, RepoStatus, RepoStore, StoreData, TomlStore};
+use gitdesktop_core::{RepoEntry, RepoStatus, RepoStore, StoreData, TomlStore};
 use time::OffsetDateTime;
 
 use crate::messages::{Message, Tab};
@@ -18,7 +18,7 @@ pub struct OpenRepo {
 
 /// Estado raíz de la app. `iced` lo posee y llama a `update`/`view`.
 pub struct App {
-    /// Almacén persistente (`gito.toml`).
+    /// Almacén persistente (`gitdesktop.toml`).
     pub store: TomlStore,
     /// Datos cargados del almacén.
     pub data: StoreData,
@@ -45,7 +45,7 @@ impl App {
             Err(err) => {
                 // Sin directorio de configuración (caso raro): modo efímero.
                 let fallback =
-                    TomlStore::new(std::env::temp_dir().join("gito").join("gito.toml"));
+                    TomlStore::new(std::env::temp_dir().join("git-desktop-jorgenio").join("gitdesktop.toml"));
                 let data = fallback.load().unwrap_or_default();
                 (fallback, data, Some(err.to_string()))
             }
@@ -78,9 +78,14 @@ impl App {
     /// Título dinámico de la ventana.
     pub fn title(&self) -> String {
         match &self.repo {
-            Some(open) => format!("Gito — {}", open.entry.name),
-            None => "Gito".to_owned(),
+            Some(open) => format!("Git-Desktop Jorgenio — {}", open.entry.name),
+            None => "Git-Desktop Jorgenio".to_owned(),
         }
+    }
+
+    /// Vista raíz (delegada al módulo `views`).
+    pub fn view(&self) -> iced::Element<'_, Message> {
+        crate::views::view(self)
     }
 
     /// Lógica de actualización (arquitectura Elm).
@@ -187,7 +192,7 @@ pub fn open_task(path: PathBuf) -> iced::Task<Message> {
 /// M0: se ejecuta en el executor de iced; las lecturas de libgit2 son
 /// rápidas. Desde M3 esto correrá en el hilo worker del núcleo (PLAN.md §5).
 async fn open_repo(path: PathBuf) -> Result<(PathBuf, RepoStatus), String> {
-    let engine = gito_core::open(&path).map_err(|err| err.to_string())?;
+    let engine = gitdesktop_core::open(&path).map_err(|err| err.to_string())?;
     let status = engine.status().map_err(|err| err.to_string())?;
     Ok((engine.path().to_path_buf(), status))
 }

@@ -1,10 +1,10 @@
-//! # gito-core
+//! # gitdesktop-core
 //!
-//! Núcleo de Gito: motor Git (libgit2, con puente al CLI planificado para
+//! Núcleo de Git-Desktop Jorgenio: motor Git (libgit2, con puente al CLI planificado para
 //! las operaciones de red) y persistencia de la lista de repositorios.
 //!
 //! Reglas de la casa:
-//! - La UI (`gito-app`) **nunca** depende de `git2`; solo consume los
+//! - La UI (`gitdesktop-app`) **nunca** depende de `git2`; solo consume los
 //!   modelos de [`models`] y el [`engine::GitEngine`].
 //! - El acceso a Git se esconde tras [`engine::GitEngine`] para poder
 //!   migrar el motor (p. ej. a gitoxide) sin tocar la UI.

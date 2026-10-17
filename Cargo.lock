@@ -1092,17 +1092,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "gito-app"
+name = "gitdesktop-app"
 version = "0.1.0"
 dependencies = [
- "gito-core",
+ "gitdesktop-core",
  "iced",
  "rfd",
  "time",
 ]
 
 [[package]]
-name = "gito-core"
+name = "gitdesktop-core"
 version = "0.1.0"
 dependencies = [
  "dirs",

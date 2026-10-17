@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use gito_core::RepoStatus;
+use gitdesktop_core::RepoStatus;
 
 /// Pestaña activa del panel izquierdo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

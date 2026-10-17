@@ -12,11 +12,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            binary: gito
-            artifact: gito-linux-x86_64
+            binary: git-desktop-jorgenio
+            artifact: git-desktop-jorgenio-linux-x86_64
           - os: windows-latest
-            binary: gito.exe
-            artifact: gito-windows-x86_64
+            binary: git-desktop-jorgenio.exe
+            artifact: git-desktop-jorgenio-windows-x86_64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +26,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build release
-        run: cargo build --release -p gito-app
+        run: cargo build --release -p gitdesktop-app
 
       - name: Subir binario
         uses: actions/upload-artifact@v4

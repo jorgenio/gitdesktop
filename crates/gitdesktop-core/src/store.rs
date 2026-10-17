@@ -1,12 +1,12 @@
 //! Persistencia de la lista de repositorios y del estado de la UI.
 //!
-//! MVP (ver `PLAN.md` §8): un único archivo `gito.toml` con escritura
+//! MVP (ver `PLAN.md` §8): un único archivo `gitdesktop.toml` con escritura
 //! atómica y copia de seguridad. Todo vive tras [`RepoStore`] para poder
 //! migrar a SQLite en fase 2 sin tocar la UI.
 //!
 //! Rutas estándar por plataforma (vía `dirs`):
-//! - Linux:  `~/.config/gito/gito.toml`
-//! - Windows: `%APPDATA%\gito\gito.toml`
+//! - Linux:  `~/.config/gitdesktop/gitdesktop.toml`
+//! - Windows: `%APPDATA%\gitdesktop\gitdesktop.toml`
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -29,7 +29,7 @@ pub trait RepoStore: Send + Sync {
     fn path(&self) -> &Path;
 }
 
-/// Datos completos que Gito persiste en disco.
+/// Datos completos que Git-Desktop Jorgenio persiste en disco.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct StoreData {
     /// Estado global de la interfaz.
@@ -207,7 +207,7 @@ pub struct TomlStore {
 impl TomlStore {
     /// Ruta por defecto según la plataforma.
     pub fn default_path() -> Option<PathBuf> {
-        dirs::config_dir().map(|dir| dir.join("gito").join("gito.toml"))
+        dirs::config_dir().map(|dir| dir.join("git-desktop-jorgenio").join("gitdesktop.toml"))
     }
 
     /// Abre el almacén en la ruta por defecto.
@@ -297,7 +297,7 @@ mod tests {
     #[test]
     fn roundtrip_preserves_data() {
         let dir = tempfile::tempdir().unwrap();
-        let store = TomlStore::new(dir.path().join("gito.toml"));
+        let store = TomlStore::new(dir.path().join("gitdesktop.toml"));
         let now = OffsetDateTime::now_utc();
 
         let data = sample(now);
@@ -312,7 +312,7 @@ mod tests {
     #[test]
     fn missing_file_loads_default() {
         let dir = tempfile::tempdir().unwrap();
-        let store = TomlStore::new(dir.path().join("gito.toml"));
+        let store = TomlStore::new(dir.path().join("gitdesktop.toml"));
 
         let loaded = store.load().unwrap();
         assert!(loaded.repos.is_empty());
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn corrupt_file_falls_back_to_backup() {
         let dir = tempfile::tempdir().unwrap();
-        let store = TomlStore::new(dir.path().join("gito.toml"));
+        let store = TomlStore::new(dir.path().join("gitdesktop.toml"));
         let now = OffsetDateTime::now_utc();
 
         // Dos guardados: el .bak contiene la primera versión.
@@ -353,7 +353,7 @@ mod tests {
     #[test]
     fn toml_uses_repo_tables() {
         let dir = tempfile::tempdir().unwrap();
-        let store = TomlStore::new(dir.path().join("gito.toml"));
+        let store = TomlStore::new(dir.path().join("gitdesktop.toml"));
         store.save(&sample(OffsetDateTime::now_utc())).unwrap();
 
         let raw = fs::read_to_string(store.path()).unwrap();

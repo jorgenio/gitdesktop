@@ -30,4 +30,4 @@ jobs:
         run: cargo test --workspace
 
       - name: Build release
-        run: cargo build --release -p gito-app
+        run: cargo build --release -p gitdesktop-app

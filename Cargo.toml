@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/gito-core", "crates/gito-app"]
+members = ["crates/gitdesktop-core", "crates/gitdesktop-app"]
 
 [workspace.package]
 version = "0.1.0"
@@ -9,7 +9,7 @@ rust-version = "1.88"
 license = "MIT"
 
 [workspace.dependencies]
-gito-core = { path = "crates/gito-core" }
+gitdesktop-core = { path = "crates/gitdesktop-core" }
 iced = "0.14"
 git2 = { version = "0.21", default-features = false }
 serde = { version = "1", features = ["derive"] }

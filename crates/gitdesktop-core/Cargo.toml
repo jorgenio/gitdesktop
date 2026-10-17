@@ -1,6 +1,6 @@
 [package]
-name = "gito-core"
-description = "Motor Git y persistencia del cliente de escritorio Gito"
+name = "gitdesktop-core"
+description = "Motor Git y persistencia del cliente de escritorio Git-Desktop Jorgenio"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

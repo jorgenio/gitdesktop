@@ -1,6 +1,6 @@
 # PLAN — Cliente Git de escritorio en Rust (clon de GitHub Desktop)
 
-> **Nombre de trabajo:** `gito` (provisional — alternativas: GitNova, RustDesk-Git, TurGit)
+> **Nombre del proyecto:** Git-Desktop Jorgenio (crates: `gitdesktop-core` / `gitdesktop-app`, ejecutable: `git-desktop-jorgenio`)
 > **Plataformas objetivo:** Ubuntu Linux (primario) + Windows
 > **Decisiones tomadas:** UI 100% Rust (iced) · MVP = gestor Git simple (sin API de GitHub en fase 1)
 
@@ -106,7 +106,7 @@ se pueda migrar a **gix 0.89 (gitoxide, 100% Rust)** sin tocar la UI.
 | `notify` | Vigilancia del filesystem (auto-refresh de cambios) |
 | `rfd` | Diálogos nativos de archivos/carpetas (Linux + Windows) |
 | `syntect` | Resaltado de sintaxis en diffs (vía feature de iced o directo) |
-| `serde`, `toml` | Persistencia de la lista de repos y configuración (`gito.toml`) |
+| `serde`, `toml` | Persistencia de la lista de repos y configuración (`gitdesktop.toml`) |
 | `rusqlite` | SQLite embebido — **fase 2** (historial de operaciones, caché de PRs) |
 | `dirs` | Rutas de configuración por plataforma |
 | `open` | Abrir archivo/carpeta/repo en el navegador o editor |
@@ -119,12 +119,12 @@ se pueda migrar a **gix 0.89 (gitoxide, 100% Rust)** sin tocar la UI.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    gito-app (iced)                       │
+│                    gitdesktop-app (iced)                       │
 │  views: changes · history · diff · dialogs · progreso    │
 └───────────────▲─────────────────────────▲───────────────┘
       Message (Elm)              Subscription (eventos)
 ┌───────────────┴─────────────────────────┴───────────────┐
-│                  gito-core (biblioteca)                  │
+│                  gitdesktop-core (biblioteca)                  │
 │  ┌────────────┐  ┌──────────────────┐  ┌──────────────┐  │
 │  │ RepoWorker │  │  CliBridge (git) │  │ FileWatcher  │  │
 │  │ 1 hilo     │  │ clone/fetch/pull │  │ notify →     │  │
@@ -144,7 +144,7 @@ se pueda migrar a **gix 0.89 (gitoxide, 100% Rust)** sin tocar la UI.
 3. **Estado de la app** = struct único `App` (patrón Elm de iced): repos recientes, repo activo,
    `RepoStatus` cacheado, diffs cacheados por archivo seleccionado, operación en curso.
 4. **Auto-fetch cada 5 min** (temporizador tipo suscripción) + refresco por `notify` al tocar archivos.
-5. **Modelos propios** en gito-core (`FileEntry { path, status, staged }`, `DiffLine { old_no, new_no, kind, content }`,
+5. **Modelos propios** en gitdesktop-core (`FileEntry { path, status, staged }`, `DiffLine { old_no, new_no, kind, content }`,
    `CommitSummary`, `BranchInfo`, `MergeConflict { path, ours, theirs }`) — la UI nunca ve tipos de git2.
 
 ---
@@ -154,7 +154,7 @@ se pueda migrar a **gix 0.89 (gitoxide, 100% Rust)** sin tocar la UI.
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
 │ ▤ Current Repository   │ ⑂ Current Branch      │ ⇩ Pull origin              │
-│   gito            ▾    │   main            ▾    │   Última sync: hace 3 min  │
+│   gitdesktop            ▾    │   main            ▾    │   Última sync: hace 3 min  │
 ├──────────────┬─────────────────────────────────────────────────────────────┤
 │ Changes  (3) │  app/src/ui/diff/seamless_diff_switcher.rs        ⚙         │
 │ History      ├─────────────────────────────────────────────────────────────┤
@@ -206,13 +206,13 @@ están listados, sin volver a buscarlos. Para el MVP se usa un **archivo de conf
 usuario). Una base de datos formal (SQLite) entra en fase 2, solo cuando el volumen de datos lo
 justifique — no necesitamos SQL para guardar 10-50 rutas.
 
-### 8.1 MVP — `gito.toml` (`dirs` + `serde` + `toml`)
+### 8.1 MVP — `gitdesktop.toml` (`dirs` + `serde` + `toml`)
 
-- Rutas estándar de cada plataforma: Linux `~/.config/gito/gito.toml` · Windows `%APPDATA%\gito\gito.toml`
-- Escritura **atómica** (archivo temporal + rename) y copia de seguridad `gito.toml.bak`;
+- Rutas estándar de cada plataforma: Linux `~/.config/gitdesktop/gitdesktop.toml` · Windows `%APPDATA%\gitdesktop\gitdesktop.toml`
+- Escritura **atómica** (archivo temporal + rename) y copia de seguridad `gitdesktop.toml.bak`;
   si el archivo se corrompe se restaura el backup y se recrea limpio
 - La app es el único proceso que escribe ese archivo → sin bloqueos, sin daemon
-- Código aislado en `gito-core/store.rs` tras un mini-trait `RepoStore` (igual que `GitEngine`),
+- Código aislado en `gitdesktop-core/store.rs` tras un mini-trait `RepoStore` (igual que `GitEngine`),
   para poder cambiar a SQLite sin tocar la UI
 
 ```toml
@@ -223,8 +223,8 @@ window = { width = 1400, height = 900, maximized = false }
 
 [[repo]]
 id = "a1b2c3"
-path = "/home/jorgenio/Projects/gito"
-name = "gito"
+path = "/home/jorgenio/Projects/gitdesktop"
+name = "gitdesktop"
 added_at = 2026-10-17T10:00:00Z
 last_opened_at = 2026-10-17T18:30:00Z
 pinned = false
@@ -258,10 +258,10 @@ La migración es automática: al primer arranque se lee el TOML y se inserta en 
 ## 9. Estructura del repositorio
 
 ```
-gito/
+gitdesktop/
 ├── Cargo.toml                  # workspace
 ├── crates/
-│   ├── gito-core/
+│   ├── gitdesktop-core/
 │   │   └── src/
 │   │       ├── lib.rs
 │   │       ├── engine.rs       # trait GitEngine + factory
@@ -271,9 +271,9 @@ gito/
 │   │       │   ├── status.rs, diff.rs, commits.rs, branches.rs, merge.rs
 │   │       ├── cli.rs          # CliBridge: spawn git --progress, parse de progreso
 │   │       ├── watcher.rs
-│   │       ├── store.rs       # persistencia: repos + estado UI → gito.toml (atómico)
+│   │       ├── store.rs       # persistencia: repos + estado UI → gitdesktop.toml (atómico)
 │   │       └── error.rs
-│   └── gito-app/
+│   └── gitdesktop-app/
 │       └── src/
 │           ├── main.rs, state.rs, messages.rs, theme.rs
 │           ├── views/          # changes.rs, history.rs, diff_view.rs, dialogs.rs
@@ -299,7 +299,7 @@ Licencia propuesta: **MIT** (o Apache-2.0 para cobertura de patentes).
 | **M4 — Ramas + Merge** | semana 7 | Selector de rama, crear/cambiar/eliminar, merge, conflictos (marcar resuelto / abortar), clone con progreso | Merge con conflicto detectado, resuelto y commiteado desde la app |
 | **M5 — Release 0.1.0** | semana 8 | Pulido, atajos, errores amigables, .deb + AppImage + MSI firmado (o sin firmar) | Instalable en Ubuntu 22.04/24.04 y Windows 10/11 |
 
-**Esfuerzo estimado:** ~8 semanas a tiempo parcial (1 desarrollador). El núcleo `gito-core`
+**Esfuerzo estimado:** ~8 semanas a tiempo parcial (1 desarrollador). El núcleo `gitdesktop-core`
 es reutilizable después para CLI (fase 2) sin cambios en la UI.
 
 ### Post-MVP (orden sugerido)
@@ -335,7 +335,7 @@ es reutilizable después para CLI (fase 2) sin cambios en la UI.
 
 ## 13. Próximos pasos inmediatos
 
-1. Crear el workspace y el esqueleto de `gito-core`/`gito-app` (M0), incluida la capa de persistencia `store.rs` → `gito.toml`
+1. Crear el workspace y el esqueleto de `gitdesktop-core`/`gitdesktop-app` (M0), incluida la capa de persistencia `store.rs` → `gitdesktop.toml`
 2. Configurar CI de las dos plataformas desde el día 1
 3. Prototipo del **widget de diff** (el componente más crítico de la UI)
 4. Validar M3 con un repo real temprano (la red es la parte con más sorpresas)

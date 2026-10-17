@@ -1,4 +1,4 @@
-//! Errores unificados del núcleo de Gito.
+//! Errores unificados del núcleo de Git-Desktop Jorgenio.
 
 use std::path::{Path, PathBuf};
 

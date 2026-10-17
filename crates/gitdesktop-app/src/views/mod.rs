@@ -4,7 +4,7 @@
 pub mod changes;
 pub mod history;
 
-use iced::widget::{button, center, column, container, horizontal_space, rule, row, scrollable, text};
+use iced::widget::{button, center, column, container, rule, row, scrollable, space, text};
 use iced::{Alignment, Element, Fill, Length};
 
 use crate::messages::{Message, Tab};
@@ -45,7 +45,7 @@ fn welcome(app: &App) -> Element<'_, Message> {
     }
 
     let content = column![
-        text("Gito").size(42),
+        text("Git-Desktop Jorgenio").size(36),
         text("Tu gestor de Git, rápido y sin terminal.")
             .size(14)
             .style(theme::muted),
@@ -66,7 +66,7 @@ fn welcome(app: &App) -> Element<'_, Message> {
 
 // ————————————————————————— Vista de repositorio ——————————————————————————
 
-fn repository(app: &App, open: &OpenRepo) -> Element<'_, Message> {
+fn repository<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
     column![
         header(app, open),
         error_banner(app),
@@ -81,7 +81,7 @@ fn repository(app: &App, open: &OpenRepo) -> Element<'_, Message> {
 }
 
 /// Cabecera: repositorio actual · rama · Pull origin (como el screenshot).
-fn header(app: &App, open: &OpenRepo) -> Element<'_, Message> {
+fn header<'a>(_app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
     container(
         row![
             column![
@@ -93,13 +93,13 @@ fn header(app: &App, open: &OpenRepo) -> Element<'_, Message> {
                 .on_press(Message::OpenFolderDialog)
                 .padding([6, 10])
                 .style(button::text),
-            horizontal_space(),
+            space::horizontal(),
             column![
                 text("Rama actual").size(10).style(theme::muted),
                 text(branch_label(open)).size(15),
             ]
             .spacing(2),
-            horizontal_space(),
+            space::horizontal(),
             button(
                 column![
                     text("Pull origin").size(14),
@@ -121,7 +121,7 @@ fn header(app: &App, open: &OpenRepo) -> Element<'_, Message> {
 }
 
 /// Panel lateral: pestañas Cambios/Historial + contenido.
-fn sidebar(app: &App, open: &OpenRepo) -> Element<'_, Message> {
+fn sidebar<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
     let tabs = row![
         tab_button(app.tab, Tab::Changes, format!("Cambios ({})", open.status.entries.len())),
         tab_button(app.tab, Tab::History, "Historial".to_owned()),
@@ -179,7 +179,7 @@ fn main_panel(open: &OpenRepo) -> Element<'_, Message> {
 }
 
 /// Barra de estado inferior: ruta, contadores y refresco manual.
-fn status_bar(app: &App, open: &OpenRepo) -> Element<'_, Message> {
+fn status_bar<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
     let state_text = if app.loading {
         "Calculando estado…".to_owned()
     } else {
@@ -197,7 +197,7 @@ fn status_bar(app: &App, open: &OpenRepo) -> Element<'_, Message> {
             text(open.entry.path.display().to_string())
                 .size(11)
                 .style(theme::muted),
-            horizontal_space(),
+            space::horizontal(),
             text(state_text).size(11).style(theme::muted),
             button(text("Refrescar").size(11))
                 .on_press(Message::Refresh)

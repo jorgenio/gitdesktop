@@ -26,14 +26,14 @@ pub(super) fn status(repo: &git2::Repository) -> Result<RepoStatus> {
         // directorio de trabajo).
         if let Some(st) = index_status(s) {
             entries.push(FileEntry {
-                path: entry_path(entry),
+                path: entry_path(&entry),
                 status: st,
                 staged: true,
             });
         }
         if let Some(st) = workdir_status(s) {
             entries.push(FileEntry {
-                path: entry_path(entry),
+                path: entry_path(&entry),
                 status: st,
                 staged: false,
             });
@@ -49,7 +49,7 @@ pub(super) fn status(repo: &git2::Repository) -> Result<RepoStatus> {
     })
 }
 
-fn entry_path(entry: git2::StatusEntry<'_>) -> String {
+fn entry_path(entry: &git2::StatusEntry<'_>) -> String {
     entry
         .path()
         .unwrap_or_default()
@@ -102,8 +102,14 @@ fn current_branch(repo: &git2::Repository) -> (String, bool) {
         }
         Err(_) => match repo.find_reference("HEAD") {
             Ok(head) => {
-                let target = head.symbolic_target().unwrap_or("HEAD");
-                let name = target.trim_start_matches("refs/heads/").to_string();
+                // symbolic_target() -> Result<Option<&str>, _>
+                let name = head
+                    .symbolic_target()
+                    .ok()
+                    .flatten()
+                    .unwrap_or("HEAD")
+                    .trim_start_matches("refs/heads/")
+                    .to_string();
                 (name, false)
             }
             Err(_) => (String::new(), false),
@@ -121,15 +127,13 @@ fn ahead_behind(repo: &git2::Repository) -> (u32, u32) {
         return (0, 0);
     };
 
-    let Some(branch_name) = head
-        .as_branch()
-        .and_then(|b| b.name().ok().flatten())
-        .map(str::to_owned)
-    else {
+    // `shorthand()` es Result<&str, _>: en HEAD detached devuelve el
+    // short-oid y `find_branch` fallará → (0, 0), que es lo correcto.
+    let Ok(branch_name) = head.shorthand() else {
         return (0, 0);
     };
 
-    let Ok(branch) = repo.find_branch(&branch_name, git2::BranchType::Local) else {
+    let Ok(branch) = repo.find_branch(branch_name, git2::BranchType::Local) else {
         return (0, 0);
     };
     let Ok(upstream) = branch.upstream() else {

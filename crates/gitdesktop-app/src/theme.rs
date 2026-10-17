@@ -14,6 +14,7 @@ pub const TEXT_MUTED: Color = hex(0x8B_94_9E);
 pub const ACCENT: Color = hex(0x2F_81_F7); // azul GitHub
 pub const SUCCESS: Color = hex(0x23_86_36);
 pub const DANGER: Color = hex(0xDA_36_33);
+pub const WARNING: Color = hex(0xD2_99_22); // amarillo GitHub
 
 const fn hex(value: u32) -> Color {
     Color {
@@ -24,22 +25,23 @@ const fn hex(value: u32) -> Color {
     }
 }
 
-/// Tema base de Gito (oscuro).
-pub fn gito() -> Theme {
+/// Tema base de Git-Desktop Jorgenio (oscuro).
+pub fn gitdesktop() -> Theme {
     Theme::custom(
-        "gito-dark",
+        "gitdesktop-dark",
         Palette {
             background: CANVAS,
             text: TEXT,
             primary: ACCENT,
             success: SUCCESS,
             danger: DANGER,
+            warning: WARNING,
         },
     )
 }
 
 /// Panel con borde redondeado (cabecera, tarjetas).
-pub fn panel(theme: &Theme) -> container::Style {
+pub fn panel(_theme: &Theme) -> container::Style {
     container::Style {
         background: Some(PANEL.into()),
         border: Border {
@@ -52,7 +54,7 @@ pub fn panel(theme: &Theme) -> container::Style {
 }
 
 /// Columna lateral sin borde.
-pub fn sidebar(theme: &Theme) -> container::Style {
+pub fn sidebar(_theme: &Theme) -> container::Style {
     container::Style {
         background: Some(PANEL.into()),
         ..container::Style::default()
@@ -60,14 +62,14 @@ pub fn sidebar(theme: &Theme) -> container::Style {
 }
 
 /// Texto atenuado (secundario).
-pub fn muted(theme: &Theme) -> text::Style {
+pub fn muted(_theme: &Theme) -> text::Style {
     text::Style {
         color: Some(TEXT_MUTED),
     }
 }
 
 /// Texto de error.
-pub fn error(theme: &Theme) -> text::Style {
+pub fn error(_theme: &Theme) -> text::Style {
     text::Style {
         color: Some(DANGER),
     }

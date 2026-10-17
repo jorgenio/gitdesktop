@@ -3,10 +3,10 @@
 //! M0: el checkbox es informativo (el toggle real de stage/unstage llega
 //! en M1 junto con `git add`/`git reset` en el núcleo).
 
-use iced::widget::{center, checkbox, column, horizontal_space, row, text};
-use iced::{Alignment, Element, Fill};
+use iced::widget::{center, checkbox, column, row, space, text};
+use iced::{Alignment, Element};
 
-use gito_core::{FileEntry, RepoStatus};
+use gitdesktop_core::{FileEntry, RepoStatus};
 
 use crate::messages::Message;
 use crate::theme;
@@ -38,7 +38,7 @@ pub fn view(status: &RepoStatus) -> Element<'_, Message> {
 fn file_row(entry: &FileEntry) -> Element<'_, Message> {
     row![
         checkbox(entry.staged).label(entry.path.clone()).size(16),
-        horizontal_space(),
+        space::horizontal(),
         text(entry.status.label()).size(11).style(theme::muted),
     ]
     .spacing(8)
