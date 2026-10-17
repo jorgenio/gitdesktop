@@ -1,0 +1,3 @@
+# iced 0.14 requiere Rust >= 1.88 (MSRV del workspace).
+[toolchain]
+channel = "stable"

@@ -1,0 +1,17 @@
+[package]
+name = "gito-app"
+description = "Cliente Git de escritorio Gito (interfaz iced)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "gito"
+path = "src/main.rs"
+
+[dependencies]
+gito-core = { workspace = true }
+iced = { workspace = true }
+rfd = { workspace = true }
+time = { workspace = true }

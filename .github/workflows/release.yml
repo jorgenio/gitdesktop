@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            binary: gito
+            artifact: gito-linux-x86_64
+          - os: windows-latest
+            binary: gito.exe
+            artifact: gito-windows-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release -p gito-app
+
+      - name: Subir binario
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: target/release/${{ matrix.binary }}
+
+# Nota (M5): aquí irán los instaladores — .deb/AppImage en Linux y MSI en
+# Windows, más la creación automática del release en GitHub.

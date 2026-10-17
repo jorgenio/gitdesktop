@@ -1,0 +1,18 @@
+[package]
+name = "gito-core"
+description = "Motor Git y persistencia del cliente de escritorio Gito"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+git2 = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+dirs = { workspace = true }
+time = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
