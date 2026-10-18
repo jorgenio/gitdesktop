@@ -16,6 +16,9 @@ pub enum GitoError {
     #[error("no se pudo determinar el directorio de configuración del usuario")]
     ConfigDir,
 
+    #[error("falta configurar tu identidad: ejecuta `git config --global user.name` y `user.email`")]
+    MissingIdentity,
+
     #[error("error de E/S en {path}: {source}")]
     Io {
         path: PathBuf,

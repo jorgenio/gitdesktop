@@ -10,13 +10,13 @@ license = "MIT"
 
 [workspace.dependencies]
 gitdesktop-core = { path = "crates/gitdesktop-core" }
-iced = "0.14"
+iced = { version = "0.14", features = ["tokio"] }
 git2 = { version = "0.21", default-features = false }
 serde = { version = "1", features = ["derive"] }
 toml = "0.9"
 thiserror = "2"
 dirs = "6"
-time = { version = "0.3", features = ["serde", "serde-well-known", "formatting", "parsing"] }
+time = { version = "0.3", features = ["serde", "serde-well-known", "formatting", "parsing", "macros"] }
 rfd = "0.15"
 tempfile = "3"
 

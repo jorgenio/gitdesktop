@@ -1,18 +1,19 @@
-//! Vista «Cambios»: lista de archivos modificados con checkbox de stage.
-//!
-//! M0: el checkbox es informativo (el toggle real de stage/unstage llega
-//! en M1 junto con `git add`/`git reset` en el núcleo).
+//! Vista «Cambios»: lista interactiva de archivos (stage/unstage/discard)
+//! + panel de commit con resumen y descripción.
 
-use iced::widget::{center, checkbox, column, row, space, text};
-use iced::{Alignment, Element};
+use iced::alignment;
+use iced::widget::{button, center, checkbox, column, row, scrollable, text, text_editor, text_input};
+use iced::{Alignment, Element, Fill, Length};
 
-use gitdesktop_core::{FileEntry, RepoStatus};
+use gitdesktop_core::FileEntry;
 
 use crate::messages::Message;
+use crate::state::{App, OpenRepo};
 use crate::theme;
 
-pub fn view(status: &RepoStatus) -> Element<'_, Message> {
-    if status.entries.is_empty() {
+/// Lista de archivos (panel izquierdo, bajo las pestañas).
+pub fn view<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
+    if open.status.entries.is_empty() {
         return center(
             column![
                 text("Todo limpio").size(18),
@@ -26,23 +27,119 @@ pub fn view(status: &RepoStatus) -> Element<'_, Message> {
         .into();
     }
 
-    let mut list = column![].spacing(2).padding([8, 6]);
+    let mut list = column![].spacing(1).padding([8, 4]);
 
-    for entry in &status.entries {
-        list = list.push(file_row(entry));
+    for entry in &open.status.entries {
+        list = list.push(file_row(app, entry));
     }
 
-    list.into()
+    column![
+        scrollable(list).height(Fill),
+        commit_panel(app, open),
+    ]
+    .height(Fill)
+    .into()
 }
 
-fn file_row(entry: &FileEntry) -> Element<'_, Message> {
-    row![
-        checkbox(entry.staged).label(entry.path.clone()).size(16),
-        space::horizontal(),
-        text(entry.status.label()).size(11).style(theme::muted),
+fn file_row<'a>(app: &'a App, entry: &'a FileEntry) -> Element<'a, Message> {
+    let is_selected = app
+        .selected
+        .as_ref()
+        .map(|(path, _)| path.as_str())
+        == Some(entry.path.as_str());
+
+    // El nombre selecciona el archivo (su diff usa staged o no según la fila).
+    let name = button(text(entry.path.clone()).size(13).width(Fill))
+        .on_press(Message::FileSelected {
+            path: entry.path.clone(),
+            staged: entry.staged,
+        })
+        .padding([4, 4])
+        .width(Fill)
+        .style(theme::ghost);
+
+    let mut controls = row![
+        checkbox(entry.staged)
+            .label(entry.path.clone())
+            .size(15)
+            .on_toggle(move |checked| Message::ToggleStaged {
+                path: entry.path.clone(),
+                staged: checked,
+            }),
+        name,
+    ]
+    .spacing(6)
+    .align_y(Alignment::Center);
+
+    // Descartar solo tiene sentido para cambios sin preparar.
+    if !entry.staged {
+        controls = controls.push(
+            button(text("descartar").size(10).style(theme::muted))
+                .on_press(Message::RequestDiscard {
+                    path: entry.path.clone(),
+                })
+                .padding([3, 6])
+                .style(theme::menu_item),
+        );
+    }
+
+    controls = controls.push(
+        text(entry.status.label())
+            .size(11)
+            .style(theme::muted)
+            .width(Length::Fixed(92.0))
+            .align_x(alignment::Horizontal::Right),
+    );
+
+    container_row(controls.width(Fill), is_selected)
+}
+
+fn container_row<'a>(
+    content: impl Into<iced::Element<'a, Message>>,
+    selected: bool,
+) -> Element<'a, Message> {
+    iced::widget::container(content)
+        .width(Fill)
+        .padding([2, 6])
+        .style(theme::file_row(selected))
+        .into()
+}
+
+/// Panel inferior: resumen + descripción + botón de commit.
+fn commit_panel<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
+    let can_commit = open.status.staged_count() > 0 && !app.summary.trim().is_empty();
+
+    let branch = if open.status.branch.is_empty() {
+        "main".to_owned()
+    } else {
+        open.status.branch.clone()
+    };
+
+    column![
+        text_input("Resumen (obligatorio)", &app.summary)
+            .on_input(Message::SummaryChanged)
+            .size(13)
+            .padding([8, 10]),
+        text_editor(&app.description)
+            .on_action(Message::DescriptionEdited)
+            .size(12)
+            .height(Length::Fixed(84.0)),
+        button(
+            text(format!("Hacer commit en {branch}"))
+                .size(13)
+                .align_x(Alignment::Center)
+                .width(Fill),
+        )
+        .on_press_maybe(if can_commit {
+            Some(Message::CommitPressed)
+        } else {
+            None
+        })
+        .padding([10, 0])
+        .width(Fill)
+        .style(button::primary),
     ]
     .spacing(8)
-    .padding([4, 4])
-    .align_y(Alignment::Center)
+    .padding([10, 10])
     .into()
 }

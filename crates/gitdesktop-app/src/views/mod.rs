@@ -1,11 +1,13 @@
-//! Vistas: pantalla de bienvenida y vista principal de repositorio
-//! (maqueta de GitHub Desktop: cabecera, panel lateral, diff y estado).
+//! Vistas: pantalla de bienvenida, vista principal de repositorio y
+//! modales (menú desplegable, Acerca de, confirmación de descarte).
 
 pub mod changes;
+pub mod diff_view;
 pub mod history;
+pub mod titlebar;
 
-use iced::widget::{button, center, column, container, rule, row, scrollable, space, text};
-use iced::{Alignment, Element, Fill, Length};
+use iced::widget::{button, center, column, container, mouse_area, row, rule, space, text, Stack};
+use iced::{Alignment, Element, Fill, Length, Padding};
 
 use crate::messages::{Message, Tab};
 use crate::state::{App, OpenRepo};
@@ -13,13 +15,95 @@ use crate::theme;
 
 /// Vista raíz según haya o no un repositorio abierto.
 pub fn view(app: &App) -> Element<'_, Message> {
+    column![
+        titlebar::bar(app),
+        error_banner(app),
+        Stack::with_children(vec![
+            body(app),
+            titlebar::menu_overlay(app),
+            modals(app),
+        ])
+        .width(Fill)
+        .height(Fill),
+    ]
+    .width(Fill)
+    .height(Fill)
+    .into()
+}
+
+// ————————————————————————————— cuerpo ————————————————————————————————
+
+fn body(app: &App) -> Element<'_, Message> {
     match &app.repo {
         Some(open) => repository(app, open),
         None => welcome(app),
     }
 }
 
-// ————————————————————————— Pantalla de bienvenida —————————————————————————
+fn repository<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
+    row![
+        sidebar(app, open),
+        rule::vertical(1),
+        main_panel(app),
+    ]
+    .width(Fill)
+    .height(Fill)
+    .into()
+}
+
+fn sidebar<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
+    let tabs = row![
+        tab_button(app.tab, Tab::Changes, format!("Cambios ({})", open.status.entries.len())),
+        tab_button(app.tab, Tab::History, "Historial".to_owned()),
+    ]
+    .width(Fill);
+
+    let content = match app.tab {
+        Tab::Changes => changes::view(app, open),
+        Tab::History => history::list(app),
+    };
+
+    container(
+        column![tabs, rule::horizontal(1), content].width(Fill).height(Fill),
+    )
+    .padding(Padding {
+        top: 0.0,
+        right: 0.0,
+        bottom: 0.0,
+        left: 0.0,
+    })
+    .style(theme::sidebar)
+    .width(Length::Fixed(380.0))
+    .height(Fill)
+    .into()
+}
+
+fn tab_button(active: Tab, this: Tab, label: String) -> Element<'static, Message> {
+    button(
+        text(label)
+            .size(13)
+            .align_x(Alignment::Center)
+            .width(Fill),
+    )
+    .on_press(Message::TabSelected(this))
+    .padding([9, 12])
+    .width(Fill)
+    .style(if active == this {
+        button::primary
+    } else {
+        button::text
+    })
+    .into()
+}
+
+fn main_panel(app: &App) -> Element<'_, Message> {
+    match app.tab {
+        Tab::Changes => diff_view::view(app.diff.as_ref(), app.selected.as_ref()),
+        Tab::History => history::detail(app),
+    }
+}
+
+// ————————————————————————— pantalla de bienvenida —————————————————————————
 
 fn welcome(app: &App) -> Element<'_, Message> {
     let mut recents = column![].spacing(4).max_width(560);
@@ -49,172 +133,130 @@ fn welcome(app: &App) -> Element<'_, Message> {
         text("Tu gestor de Git, rápido y sin terminal.")
             .size(14)
             .style(theme::muted),
-        button(text("Abrir repositorio…").size(14))
+        button(text("Abrir repositorio…").size(14).align_x(Alignment::Center).width(Fill))
             .on_press(Message::OpenFolderDialog)
             .padding([10, 18])
+            .width(Length::Fixed(260.0))
             .style(button::primary),
         recents,
     ]
     .spacing(16)
     .align_x(Alignment::Center);
 
-    column![error_banner(app), center(content)]
-        .width(Fill)
-        .height(Fill)
-        .into()
+    center(content).width(Fill).height(Fill).into()
 }
 
-// ————————————————————————— Vista de repositorio ——————————————————————————
+// ————————————————————————————— modales ————————————————————————————————
 
-fn repository<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
-    column![
-        header(app, open),
-        error_banner(app),
-        row![sidebar(app, open), rule::vertical(1), main_panel(open)]
+/// Acerca de… y confirmación de descarte.
+fn modals(app: &App) -> Element<'_, Message> {
+    if app.about {
+        return about_modal();
+    }
+    if let Some(path) = &app.pending_discard {
+        return discard_modal(path);
+    }
+    column![].into()
+}
+
+fn about_modal() -> Element<'static, Message> {
+    let scrim = mouse_area(
+        container(space::Space::new().width(Fill).height(Fill))
             .width(Fill)
-            .height(Fill),
-        status_bar(app, open),
-    ]
-    .width(Fill)
-    .height(Fill)
-    .into()
-}
-
-/// Cabecera: repositorio actual · rama · Pull origin (como el screenshot).
-fn header<'a>(_app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
-    container(
-        row![
-            column![
-                text("Repositorio actual").size(10).style(theme::muted),
-                text(open.entry.name.clone()).size(15),
-            ]
-            .spacing(2),
-            button(text("Abrir…").size(12))
-                .on_press(Message::OpenFolderDialog)
-                .padding([6, 10])
-                .style(button::text),
-            space::horizontal(),
-            column![
-                text("Rama actual").size(10).style(theme::muted),
-                text(branch_label(open)).size(15),
-            ]
-            .spacing(2),
-            space::horizontal(),
-            button(
-                column![
-                    text("Pull origin").size(14),
-                    text(sync_label(open)).size(10).style(theme::muted),
-                ]
-                .spacing(2)
-            )
-            .padding([6, 10])
-            .style(button::text),
-        ]
-        .spacing(14)
-        .align_y(Alignment::Center)
-        .width(Fill),
+            .height(Fill)
+            .style(theme::scrim),
     )
-    .padding([10, 14])
-    .style(theme::panel)
-    .width(Fill)
-    .into()
-}
+    .on_press(Message::AboutToggled(false));
 
-/// Panel lateral: pestañas Cambios/Historial + contenido.
-fn sidebar<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
-    let tabs = row![
-        tab_button(app.tab, Tab::Changes, format!("Cambios ({})", open.status.entries.len())),
-        tab_button(app.tab, Tab::History, "Historial".to_owned()),
-    ]
-    .width(Fill);
-
-    let body = match app.tab {
-        Tab::Changes => changes::view(&open.status),
-        Tab::History => history::view(open),
-    };
-
-    container(
-        column![tabs, rule::horizontal(1), scrollable(body).height(Fill)]
-            .width(Fill)
-            .height(Fill),
-    )
-    .style(theme::sidebar)
-    .width(Length::Fixed(380.0))
-    .height(Fill)
-    .into()
-}
-
-fn tab_button(active: Tab, this: Tab, label: String) -> Element<'static, Message> {
-    button(text(label).size(13))
-        .on_press(Message::TabSelected(this))
-        .padding([8, 12])
-        .width(Fill)
-        .style(if active == this {
-            button::primary
-        } else {
-            button::text
-        })
-        .into()
-}
-
-/// Panel principal: placeholder del visor de diff (se construye en M1).
-fn main_panel(open: &OpenRepo) -> Element<'_, Message> {
-    center(
+    let card = container(
         column![
-            text("Vista de diff — llega en M1").size(18),
-            text(format!(
-                "Aquí se mostrará el diff unificado de «{}» con resaltado de sintaxis.",
-                open.entry.name
-            ))
-            .size(12)
-            .style(theme::muted),
-        ]
-        .spacing(8)
-        .max_width(520)
-        .align_x(Alignment::Center),
-    )
-    .width(Fill)
-    .height(Fill)
-    .into()
-}
-
-/// Barra de estado inferior: ruta, contadores y refresco manual.
-fn status_bar<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
-    let state_text = if app.loading {
-        "Calculando estado…".to_owned()
-    } else {
-        format!(
-            "{} preparados · {} sin preparar · ↑{} ↓{}",
-            open.status.staged_count(),
-            open.status.unstaged_count(),
-            open.status.ahead,
-            open.status.behind
-        )
-    };
-
-    container(
-        row![
-            text(open.entry.path.display().to_string())
-                .size(11)
+            text("Git-Desktop Jorgenio").size(22),
+            text(format!("Versión {}", env!("CARGO_PKG_VERSION")))
+                .size(12)
                 .style(theme::muted),
-            space::horizontal(),
-            text(state_text).size(11).style(theme::muted),
-            button(text("Refrescar").size(11))
-                .on_press(Message::Refresh)
-                .padding([4, 8])
-                .style(button::text),
+            text("Cliente Git de escritorio 100% en Rust,\ncon la filosofía de GitHub Desktop.")
+                .size(12)
+                .style(theme::muted),
+            button(
+                text("Cerrar")
+                    .size(13)
+                    .align_x(Alignment::Center)
+                    .width(Fill),
+            )
+            .on_press(Message::AboutToggled(false))
+            .padding([8, 0])
+            .width(Fill)
+            .style(button::primary),
         ]
-        .spacing(10)
-        .align_y(Alignment::Center)
-        .width(Fill),
+        .spacing(12)
+        .max_width(340),
     )
-    .padding([6, 14])
-    .style(theme::panel)
-    .width(Fill)
+    .padding(24)
+    .style(theme::panel);
+
+    Stack::with_children(vec![
+        scrim.into(),
+        center(card).width(Fill).height(Fill).into(),
+    ])
     .into()
 }
 
-// —————————————————————————————— Utilidades ———————————————————————————————
+fn discard_modal(path: &str) -> Element<'static, Message> {
+    let _ = path; // el mensaje lleva la ruta capturada abajo
+    let path_owned = path.to_owned();
+
+    let scrim = mouse_area(
+        container(space::Space::new().width(Fill).height(Fill))
+            .width(Fill)
+            .height(Fill)
+            .style(theme::scrim),
+    )
+    .on_press(Message::CancelDiscard);
+
+    let card = container(
+        column![
+            text("¿Descartar los cambios?").size(18),
+            text(format!("Se perderán los cambios sin preparar de:\n{path_owned}"))
+                .size(12)
+                .style(theme::muted),
+            row![
+                button(
+                    text("Cancelar")
+                        .size(13)
+                        .align_x(Alignment::Center)
+                        .width(Fill),
+                )
+                .on_press(Message::CancelDiscard)
+                .padding([8, 0])
+                .width(Fill)
+                .style(button::text),
+                button(
+                    text("Descartar")
+                        .size(13)
+                        .align_x(Alignment::Center)
+                        .width(Fill),
+                )
+                .on_press(Message::ConfirmDiscard)
+                .padding([8, 0])
+                .width(Fill)
+                .style(button::danger),
+            ]
+            .spacing(10),
+        ]
+        .spacing(12)
+        .max_width(380),
+    )
+    .padding(24)
+    .style(theme::panel);
+
+    Stack::with_children(vec![
+        scrim.into(),
+        center(card).width(Fill).height(Fill).into(),
+    ])
+    .into()
+}
+
+// ————————————————————————————— utilidades ————————————————————————————————
 
 /// Banner de error descartable (fila de altura cero si no hay error).
 fn error_banner(app: &App) -> Element<'_, Message> {
@@ -236,23 +278,4 @@ fn error_banner(app: &App) -> Element<'_, Message> {
     .padding([6, 14])
     .width(Fill)
     .into()
-}
-
-fn branch_label(open: &OpenRepo) -> String {
-    if open.status.head_detached {
-        format!("{} (detached)", open.status.branch)
-    } else if open.status.branch.is_empty() {
-        "(sin commits aún)".to_owned()
-    } else {
-        open.status.branch.clone()
-    }
-}
-
-fn sync_label(open: &OpenRepo) -> String {
-    match (open.status.ahead, open.status.behind) {
-        (0, 0) => "sincronizado con el remoto".to_owned(),
-        (a, 0) => format!("{a} commit(s) sin publicar"),
-        (0, b) => format!("{b} commit(s) para actualizar"),
-        (a, b) => format!("{a} sin publicar · {b} para actualizar"),
-    }
 }

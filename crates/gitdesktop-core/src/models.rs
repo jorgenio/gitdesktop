@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use time::OffsetDateTime;
+
 /// Estado de un archivo dentro del repositorio.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileStatus {
@@ -67,6 +69,39 @@ impl RepoStatus {
     pub fn unstaged_count(&self) -> usize {
         self.entries.iter().filter(|e| !e.staged).count()
     }
+}
+
+/// Tipo de línea en un diff unificado.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiffLineKind {
+    Context,
+    Added,
+    Deleted,
+    HunkHeader,
+}
+
+/// Una línea de un diff unificado.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiffLine {
+    /// Número de línea en el archivo viejo (`None` si es añadida).
+    pub old_no: Option<u32>,
+    /// Número de línea en el archivo nuevo (`None` si es eliminada).
+    pub new_no: Option<u32>,
+    pub kind: DiffLineKind,
+    pub content: String,
+}
+
+/// Resumen de un commit para la vista de historial.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommitSummary {
+    /// SHA completo (clave para pedidos de detalle).
+    pub id: String,
+    /// SHA abreviado (7 caracteres) para mostrar.
+    pub short_id: String,
+    pub summary: String,
+    pub author: String,
+    /// Fecha del commit en UTC (la zona horaria local llega en fase 2).
+    pub time: OffsetDateTime,
 }
 
 /// Información de una rama (la usará el selector a partir de M4).

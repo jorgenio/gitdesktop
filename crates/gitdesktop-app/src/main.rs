@@ -15,6 +15,10 @@ pub fn main() -> iced::Result {
         .title(App::title)
         .theme(|_state: &App| theme::gitdesktop())
         .window_size((1280.0, 800.0))
+        // Sin decoraciones nativas: barra de título personalizada, como
+        // GitHub Desktop para Windows (menús + controles propios).
+        .decorations(false)
+        .subscription(App::subscription)
         .centered()
         .run()
 }

@@ -2,7 +2,8 @@
 
 use std::path::PathBuf;
 
-use gitdesktop_core::RepoStatus;
+use gitdesktop_core::{CommitSummary, DiffLine, FileEntry, RepoStatus};
+use iced::widget::text_editor;
 
 /// Pestaña activa del panel izquierdo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -12,31 +13,71 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 2] = [Tab::Changes, Tab::History];
+    // La UI construye sus etiquetas directamente; no requiere helpers.
+}
 
-    pub fn label(self) -> &'static str {
-        match self {
-            Tab::Changes => "Cambios",
-            Tab::History => "Historial",
-        }
-    }
+/// Operación sobre el índice/workdir cuya finalización se reporta.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Op {
+    Stage,
+    Unstage,
+    Discard,
+    Commit,
+}
+
+/// Acciones disponibles en el menú principal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuAction {
+    OpenRepository,
+    Refresh,
+    ShowChanges,
+    ShowHistory,
+    About,
+    Quit,
 }
 
 /// Mensajes de la aplicación.
 #[derive(Debug, Clone)]
 pub enum Message {
-    /// Abrir el diálogo nativo de selección de carpeta.
+    // ——— Menú y ventana (cromo personalizado) ———
+    MenuToggled(Option<usize>),
+    MenuSelected(MenuAction),
+    TitleBarPressed,
+    MinimizeWindow,
+    ToggleMaximize,
+    CloseWindow,
+    AboutToggled(bool),
+    /// Id de la ventana principal capturado al arrancar (iced 0.14 no
+    /// expone un `Id::MAIN`; `window::latest()` da la ventana de boot).
+    MainWindowId(Option<iced::window::Id>),
+
+    // ——— Repositorios ———
     OpenFolderDialog,
-    /// Resultado del diálogo (`None` si el usuario canceló).
     FolderPicked(Option<PathBuf>),
-    /// Terminó de abrir el repositorio y calcular su estado.
     RepoOpened(Result<(PathBuf, RepoStatus), String>),
-    /// Reabrir un repositorio reciente por su `id`.
     OpenRecent(String),
-    /// Recalcular el estado del repositorio abierto.
-    Refresh,
-    /// Cambiar de pestaña (Cambios / Historial).
+    /// Refresco automático (polling), con anti-rebote.
+    AutoRefresh,
     TabSelected(Tab),
-    /// Descartar el banner de error.
+
+    // ——— Pestaña Cambios ———
+    FileSelected { path: String, staged: bool },
+    ToggleStaged { path: String, staged: bool },
+    RequestDiscard { path: String },
+    ConfirmDiscard,
+    CancelDiscard,
+    SummaryChanged(String),
+    DescriptionEdited(text_editor::Action),
+    CommitPressed,
+    OpDone(Op, Result<(), String>),
+    DiffLoaded(Result<(String, Vec<DiffLine>), String>),
+
+    // ——— Pestaña Historial ———
+    LogLoaded(Result<Vec<CommitSummary>, String>),
+    CommitSelected(String),
+    CommitFilesLoaded(Result<(String, Vec<FileEntry>), String>),
+    CommitFileSelected(String),
+    CommitDiffLoaded(Result<(String, String, Vec<DiffLine>), String>),
+
     ClearError,
 }
