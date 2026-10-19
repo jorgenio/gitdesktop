@@ -59,7 +59,7 @@
               Name='Git-Desktop Jorgenio'
               WorkingDirectory='INSTALLFOLDER'
               Icon='AppIcon'
-              Advertise='yes' />
+              Advertise='no' />
           </Component>
         </Directory>
       </Directory>
