@@ -41,14 +41,135 @@ fn body(app: &App) -> Element<'_, Message> {
 }
 
 fn repository<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
-    row![
-        sidebar(app, open),
-        rule::vertical(1),
-        main_panel(app),
+    column![
+        header(app, open),
+        row![
+            sidebar(app, open),
+            rule::vertical(1),
+            main_panel(app),
+        ]
+        .width(Fill)
+        .height(Fill),
     ]
     .width(Fill)
     .height(Fill)
     .into()
+}
+
+/// Cabecera: repositorio actual · rama · sincronización contextual
+/// (Fetch / Pull / Push / Publicar, como GitHub Desktop).
+fn header<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
+    container(
+        row![
+            column![
+                text("Repositorio actual").size(10).style(theme::muted),
+                text(open.entry.name.clone()).size(15),
+            ]
+            .spacing(2),
+            button(text("Abrir…").size(12))
+                .on_press(Message::OpenFolderDialog)
+                .padding([6, 10])
+                .style(button::text),
+            space::horizontal(),
+            column![
+                text("Rama actual").size(10).style(theme::muted),
+                text(branch_label(open)).size(15),
+            ]
+            .spacing(2),
+            space::horizontal(),
+            sync_button(app, open),
+        ]
+        .spacing(14)
+        .align_y(Alignment::Center)
+        .width(Fill),
+    )
+    .padding([10, 14])
+    .style(theme::panel)
+    .width(Fill)
+    .into()
+}
+
+/// Botón contextual de sincronización con progreso e indicador de hora.
+fn sync_button<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
+    let status = &open.status;
+    let busy = app.running_op.is_some() || app.loading;
+
+    // Subtítulo: progreso en vivo o "última sincronización hace X".
+    let subtitle = if let Some(progress) = &app.net_progress {
+        match progress.percent {
+            Some(percent) => format!("{} · {percent} %", progress.phase),
+            None => progress.phase.clone(),
+        }
+    } else {
+        match app.last_fetch {
+            Some(at) => format!("Última sincronización: {}", ago_text(at)),
+            None => "Sin sincronizar todavía".to_owned(),
+        }
+    };
+
+    // Acción contextual, exactamente como GitHub Desktop:
+    // sin upstream → publicar · behind → pull · ahead → push · resto → fetch.
+    let (label, action): (String, Option<gitdesktop_core::NetOpKind>) =
+        if app.running_op.is_some() {
+            ("Sincronizando…".to_owned(), None)
+        } else if !status.has_remote {
+            ("Sin remoto".to_owned(), None)
+        } else if status.branch.is_empty() {
+            ("Sin commits".to_owned(), None)
+        } else if !status.has_upstream {
+            ("Publicar rama".to_owned(), Some(gitdesktop_core::NetOpKind::Push { publish: true }))
+        } else if status.behind > 0 {
+            (format!("Pull origin (↓{})", status.behind), Some(gitdesktop_core::NetOpKind::Pull))
+        } else if status.ahead > 0 {
+            (format!("Push origin (↑{})", status.ahead), Some(gitdesktop_core::NetOpKind::Push { publish: false }))
+        } else {
+            ("Fetch origin".to_owned(), Some(gitdesktop_core::NetOpKind::Fetch))
+        };
+
+    let actionable = action.is_some() && !busy;
+
+    button(
+        column![
+            text(label).size(14),
+            text(subtitle).size(10).style(theme::muted),
+        ]
+        .spacing(2),
+    )
+    .on_press_maybe(
+        action
+            .filter(|_| actionable)
+            .map(Message::NetStart),
+    )
+    .padding([6, 14])
+    .style(if actionable {
+        button::primary
+    } else {
+        button::text
+    })
+    .into()
+}
+
+/// Texto humano para "última sincronización hace X".
+fn ago_text(then: std::time::Instant) -> String {
+    let seconds = then.elapsed().as_secs();
+    if seconds < 45 {
+        "hace unos segundos".to_owned()
+    } else if seconds < 3600 {
+        format!("hace {} min", seconds / 60)
+    } else {
+        format!("hace {} h", seconds / 3600)
+    }
+}
+
+/// Etiqueta de la rama actual en la cabecera.
+fn branch_label(open: &OpenRepo) -> String {
+    if open.status.head_detached {
+        format!("{} (detached)", open.status.branch)
+    } else if open.status.branch.is_empty() {
+        "(sin commits aún)".to_owned()
+    } else {
+        open.status.branch.clone()
+    }
 }
 
 fn sidebar<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {

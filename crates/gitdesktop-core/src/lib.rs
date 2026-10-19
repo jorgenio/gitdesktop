@@ -11,6 +11,7 @@
 //! - La persistencia vive tras [`store::RepoStore`] (TOML en el MVP,
 //!   SQLite en fase 2). Ver `PLAN.md` §8.
 
+pub mod cli;
 pub mod engine;
 pub mod error;
 pub mod models;
@@ -18,6 +19,7 @@ pub mod store;
 
 mod native;
 
+pub use cli::{NetOpKind, Progress};
 pub use engine::{GitEngine, open};
 pub use error::{GitoError, Result};
 pub use models::{BranchInfo, CommitSummary, DiffLine, DiffLineKind, FileEntry, FileStatus, RepoStatus};

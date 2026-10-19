@@ -6,7 +6,8 @@ use crate::models::{FileEntry, FileStatus, RepoStatus};
 /// Rama actual, ahead/behind y lista de archivos modificados.
 pub(super) fn status(repo: &git2::Repository) -> Result<RepoStatus> {
     let (branch, head_detached) = current_branch(repo);
-    let (ahead, behind) = ahead_behind(repo);
+    let (ahead, behind, has_upstream) = ahead_behind(repo);
+    let has_remote = has_remote(repo);
 
     let mut opts = git2::StatusOptions::new();
     opts.show(git2::StatusShow::IndexAndWorkdir)
@@ -45,6 +46,8 @@ pub(super) fn status(repo: &git2::Repository) -> Result<RepoStatus> {
         head_detached,
         ahead,
         behind,
+        has_upstream,
+        has_remote,
         entries,
     })
 }
@@ -117,33 +120,41 @@ fn current_branch(repo: &git2::Repository) -> (String, bool) {
     }
 }
 
-/// `(ahead, behind)` respecto al upstream de la rama actual.
-/// Sin upstream (o sin commits) devuelve `(0, 0)`.
-fn ahead_behind(repo: &git2::Repository) -> (u32, u32) {
+/// `(ahead, behind, tiene_upstream)` respecto al upstream de la rama
+/// actual. Sin upstream (o sin commits) devuelve `(0, 0, false)`.
+fn ahead_behind(repo: &git2::Repository) -> (u32, u32, bool) {
     let Ok(head) = repo.head() else {
-        return (0, 0);
+        return (0, 0, false);
     };
     let Ok(local_commit) = head.peel_to_commit() else {
-        return (0, 0);
+        return (0, 0, false);
     };
 
     // `shorthand()` es Result<&str, _>: en HEAD detached devuelve el
-    // short-oid y `find_branch` fallará → (0, 0), que es lo correcto.
+    // short-oid y `find_branch` fallará → (0, 0, false), que es lo correcto.
     let Ok(branch_name) = head.shorthand() else {
-        return (0, 0);
+        return (0, 0, false);
     };
 
     let Ok(branch) = repo.find_branch(branch_name, git2::BranchType::Local) else {
-        return (0, 0);
+        return (0, 0, false);
     };
     let Ok(upstream) = branch.upstream() else {
-        return (0, 0);
+        return (0, 0, false);
     };
     let Ok(upstream_commit) = upstream.get().peel_to_commit() else {
-        return (0, 0);
+        return (0, 0, true);
     };
 
-    repo.graph_ahead_behind(local_commit.id(), upstream_commit.id())
-        .map(|(a, b)| (a as u32, b as u32))
-        .unwrap_or((0, 0))
+    match repo.graph_ahead_behind(local_commit.id(), upstream_commit.id()) {
+        Ok((a, b)) => (a as u32, b as u32, true),
+        Err(_) => (0, 0, true),
+    }
+}
+
+/// `true` si el repositorio tiene al menos un remoto configurado.
+fn has_remote(repo: &git2::Repository) -> bool {
+    repo.remotes()
+        .map(|names| !names.is_empty())
+        .unwrap_or(false)
 }

@@ -5,6 +5,7 @@
 
 mod messages;
 mod state;
+mod subscriptions;
 mod theme;
 mod views;
 

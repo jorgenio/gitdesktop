@@ -1,10 +1,12 @@
 //! Estado de la aplicación (patrón Elm) y tareas asíncronas.
 
 use std::path::PathBuf;
+use std::time::Duration;
 use std::time::Instant;
 
 use gitdesktop_core::{
-    CommitSummary, DiffLine, FileEntry, RepoEntry, RepoStatus, RepoStore, StoreData, TomlStore,
+    CommitSummary, DiffLine, FileEntry, NetOpKind, Progress, RepoEntry, RepoStatus, RepoStore,
+    StoreData, TomlStore,
 };
 use iced::widget::text_editor;
 use time::OffsetDateTime;
@@ -14,8 +16,19 @@ use crate::messages::{MenuAction, Message, Op, Tab};
 /// Límite de commits cargados en el historial.
 const LOG_LIMIT: usize = 200;
 
-/// Intervalo mínimo entre refrescos automáticos (anti-rebote del watcher).
-const REFRESH_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(800);
+/// Intervalo mínimo entre refrescos automáticos (anti-rebote).
+const REFRESH_MIN_INTERVAL: Duration = Duration::from_millis(800);
+
+/// Frecuencia del fetch automático en segundo plano.
+const AUTO_FETCH_INTERVAL: Duration = Duration::from_secs(5 * 60);
+
+/// Operación de red en curso (identidad de la suscripción + guardas).
+#[derive(Debug, Clone)]
+pub struct NetRun {
+    pub path: PathBuf,
+    pub branch: String,
+    pub kind: NetOpKind,
+}
 
 /// Repositorio actualmente abierto.
 #[derive(Debug, Clone)]
@@ -35,6 +48,11 @@ pub struct App {
     pub error: Option<String>,
     pub loading: bool,
     pub tab: Tab,
+
+    // Red (fetch/pull/push)
+    pub running_op: Option<NetRun>,
+    pub net_progress: Option<Progress>,
+    pub last_fetch: Option<Instant>,
 
     // Cromo personalizado (barra de título + menús)
     pub open_menu: Option<usize>,
@@ -96,6 +114,9 @@ impl App {
                 error: warning,
                 loading: false,
                 tab: Tab::Changes,
+                running_op: None,
+                net_progress: None,
+                last_fetch: None,
                 open_menu: None,
                 about: false,
                 maximized: false,
@@ -129,14 +150,29 @@ impl App {
         crate::views::view(self)
     }
 
-    /// Suscripciones: refresco automático periódico mientras haya un repo
-    /// abierto (MVP: polling; el watcher con `notify` llega en M3).
+    /// Suscripciones: refresco periódico, fetch automático y operación
+    /// de red en curso.
     pub fn subscription(&self) -> iced::Subscription<Message> {
+        let mut subs: Vec<iced::Subscription<Message>> = Vec::new();
+
         if self.repo.is_some() {
-            iced::time::every(std::time::Duration::from_millis(2000))
-                .map(|_| Message::AutoRefresh)
-        } else {
-            iced::Subscription::none()
+            subs.push(
+                iced::time::every(std::time::Duration::from_millis(2000))
+                    .map(|_| Message::AutoRefresh),
+            );
+        }
+
+        if let Some(run) = &self.running_op {
+            subs.push(crate::subscriptions::network_op(
+                run.path.clone(),
+                run.branch.clone(),
+                run.kind,
+            ));
+        }
+
+        match subs.is_empty() {
+            true => iced::Subscription::none(),
+            false => iced::Subscription::batch(subs),
         }
     }
 
@@ -227,7 +263,11 @@ impl App {
                     iced::Task::none()
                 }
             },
-            Message::AutoRefresh => self.refresh(),
+            Message::AutoRefresh => {
+                let refresh_task = self.refresh();
+                let fetch_task = self.maybe_auto_fetch();
+                iced::Task::batch([refresh_task, fetch_task])
+            }
             Message::TabSelected(tab) => {
                 self.tab = tab;
                 if let Some(open) = self.repo.as_mut() {
@@ -274,8 +314,7 @@ impl App {
                 self.pending_discard = Some(path);
                 iced::Task::none()
             }
-            Message::ConfirmDiscard => match (self.repo_path(), self.pending_discard.take())
-            {
+            Message::ConfirmDiscard => match (self.repo_path(), self.pending_discard.take()) {
                 (Some(repo_path), Some(file)) => {
                     self.loading = true;
                     discard_task(repo_path, file)
@@ -394,6 +433,26 @@ impl App {
                 self.error = None;
                 iced::Task::none()
             }
+
+            // ——— Red (fetch/pull/push) ———
+            Message::NetStart(kind) => self.start_net(kind),
+            Message::NetProgress(progress) => {
+                self.net_progress = Some(progress);
+                iced::Task::none()
+            }
+            Message::NetDone(kind, result) => {
+                self.running_op = None;
+                self.net_progress = None;
+                if matches!(kind, NetOpKind::Fetch | NetOpKind::Pull) {
+                    self.last_fetch = Some(Instant::now());
+                }
+                match result {
+                    Ok(_summary) => self.error = None,
+                    Err(err) => self.error = Some(err),
+                }
+                self.last_refresh = None;
+                self.refresh()
+            }
         }
     }
 
@@ -402,7 +461,7 @@ impl App {
     fn on_repo_opened(
         &mut self,
         path: PathBuf,
-        status: gitdesktop_core::RepoStatus,
+        status: RepoStatus,
     ) -> iced::Task<Message> {
         self.loading = false;
         self.error = None;
@@ -505,6 +564,57 @@ impl App {
         }
     }
 
+    /// Inicia una operación de red (si no hay otra en curso).
+    fn start_net(&mut self, kind: NetOpKind) -> iced::Task<Message> {
+        if self.running_op.is_some() {
+            return iced::Task::none();
+        }
+        let Some(open) = self.repo.as_ref() else {
+            return iced::Task::none();
+        };
+        if open.status.branch.is_empty() {
+            self.error = Some("El repositorio aún no tiene commits; haz el primero.".into());
+            return iced::Task::none();
+        }
+
+        self.net_progress = None;
+        if kind == NetOpKind::Fetch {
+            // Marca ya la hora para no re-disparar el auto-fetch en bucle.
+            self.last_fetch = Some(Instant::now());
+        }
+        self.running_op = Some(NetRun {
+            path: open.entry.path.clone(),
+            branch: open.status.branch.clone(),
+            kind,
+        });
+        iced::Task::none()
+    }
+
+    /// Fetch automático cada `AUTO_FETCH_INTERVAL` si hay remoto y la app
+    /// está ociosa (mantiene vivos el indicador "hace X" y el ↓/↑).
+    fn maybe_auto_fetch(&mut self) -> iced::Task<Message> {
+        if self.running_op.is_some() {
+            return iced::Task::none();
+        }
+        let Some(open) = self.repo.as_ref() else {
+            return iced::Task::none();
+        };
+        if !open.status.has_remote {
+            return iced::Task::none();
+        }
+
+        let due = match self.last_fetch {
+            None => true,
+            Some(last) => last.elapsed() >= AUTO_FETCH_INTERVAL,
+        };
+
+        if due {
+            self.start_net(NetOpKind::Fetch)
+        } else {
+            iced::Task::none()
+        }
+    }
+
     /// Persiste los datos (escritura atómica; archivo minúsculo).
     fn persist(&mut self) {
         if let Err(err) = self.store.save(&self.data) {
@@ -520,7 +630,7 @@ pub fn open_task(path: PathBuf) -> iced::Task<Message> {
     iced::Task::perform(open_repo(path), Message::RepoOpened)
 }
 
-async fn open_repo(path: PathBuf) -> Result<(PathBuf, gitdesktop_core::RepoStatus), String> {
+async fn open_repo(path: PathBuf) -> Result<(PathBuf, RepoStatus), String> {
     let engine = gitdesktop_core::open(&path).map_err(|err| err.to_string())?;
     let status = engine.status().map_err(|err| err.to_string())?;
     Ok((engine.path().to_path_buf(), status))

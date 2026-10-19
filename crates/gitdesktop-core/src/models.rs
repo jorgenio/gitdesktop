@@ -56,6 +56,10 @@ pub struct RepoStatus {
     pub ahead: u32,
     /// Commits que tiene el upstream y no tiene la rama local.
     pub behind: u32,
+    /// La rama actual tiene upstream configurado.
+    pub has_upstream: bool,
+    /// El repositorio tiene al menos un remoto.
+    pub has_remote: bool,
     pub entries: Vec<FileEntry>,
 }
 

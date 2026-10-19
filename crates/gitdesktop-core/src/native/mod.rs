@@ -47,6 +47,18 @@ impl GitEngine for NativeEngine {
         status::status(&self.repo)
     }
 
+    fn remotes(&self) -> Result<Vec<String>> {
+        let names = self.repo.remotes()?;
+        let mut remotes = Vec::new();
+        for index in 0..names.len() {
+            // get() -> Result<Option<&str>, _> en git2 0.21
+            if let Some(name) = names.get(index).ok().flatten() {
+                remotes.push(name.to_owned());
+            }
+        }
+        Ok(remotes)
+    }
+
     fn stage(&self, path: &str) -> Result<()> {
         ops::stage(&self.repo, self.workdir_path(path), path)
     }

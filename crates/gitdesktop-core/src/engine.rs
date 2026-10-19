@@ -18,6 +18,9 @@ pub trait GitEngine: Send {
     /// Estado actual: rama, ahead/behind y archivos modificados.
     fn status(&self) -> Result<RepoStatus>;
 
+    /// Nombres de los remotos configurados (`origin`, etc.).
+    fn remotes(&self) -> Result<Vec<String>>;
+
     // ——— Índice (stage) ————————————————————————————————————————————
 
     /// Prepara un archivo (`git add`; también registra borrados).

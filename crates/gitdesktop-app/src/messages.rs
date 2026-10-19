@@ -80,4 +80,12 @@ pub enum Message {
     CommitDiffLoaded(Result<(String, String, Vec<DiffLine>), String>),
 
     ClearError,
+
+    // ——— Red (fetch/pull/push vía CLI git) ———
+    /// Inicia una operación de red (botón contextual de la cabecera).
+    NetStart(gitdesktop_core::NetOpKind),
+    /// Progreso intermedio de la operación en curso.
+    NetProgress(gitdesktop_core::Progress),
+    /// Operación terminada (Ok con resumen o Err con mensaje de git).
+    NetDone(gitdesktop_core::NetOpKind, Result<String, String>),
 }
