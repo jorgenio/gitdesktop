@@ -1,0 +1,65 @@
+<?xml version='1.0' encoding='windows-1252'?>
+<!--
+  Instalador MSI de Git-Desktop Jorgenio (WiX 3.x, consumido por cargo-wix).
+  cargo-wix define: $(var.ProductName), $(var.ProductVersion),
+  $(var.Manufacturer) y $(var.ExePath).
+-->
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+  <Product
+    Id='*'
+    Name='Git-Desktop Jorgenio'
+    UpgradeCode='8E4B6F5A-2C7D-4B8E-9A1F-3D5C7E9B1A2C'
+    Language='1033'
+    Codepage='1252'
+    Version='$(var.ProductVersion)'
+    Manufacturer='Jorgenio'
+    Architecture='x64'>
+
+    <Package
+      InstallerVersion='500'
+      Compressed='yes'
+      InstallScope='perMachine'
+      Description='Cliente Git de escritorio en Rust'
+      Manufacturer='Jorgenio' />
+
+    <MajorUpgrade
+      AllowDowngrades='no'
+      DowngradeErrorMessage='Ya hay una versión más nueva de [ProductName] instalada.'
+      Schedule='afterInstallInitialize' />
+
+    <MediaTemplate EmbedCab='yes' />
+
+    <!-- Icono para Agregar o quitar programas y accesos directos -->
+    <Icon Id='AppIcon' SourceFile='..\..\assets\icon.ico' />
+    <Property Id='ARPPRODUCTICON' Value='AppIcon' />
+    <Property Id='ARPURLINFOABOUT' Value='https://github.com/jorgenio/gitdesktop' />
+
+    <Feature
+      Id='MainProgram'
+      Title='Git-Desktop Jorgenio'
+      Description='Instala el ejecutable y los accesos directos.'
+      Level='1'
+      Absent='disallow'>
+
+      <StandardDirectory Id='ProgramFiles64Folder'>
+        <Directory Id='INSTALLFOLDER' Name='Git-Desktop Jorgenio'>
+          <Component Id='MainExecutable' Guid='*'>
+            <File
+              Id='GitDesktopExe'
+              Name='git-desktop-jorgenio.exe'
+              Source='$(var.ExePath)'
+              KeyPath='yes' />
+            <Shortcut
+              Id='StartMenuShortcut'
+              Directory='ProgramMenuFolder'
+              Name='Git-Desktop Jorgenio'
+              WorkingDirectory='INSTALLFOLDER'
+              Icon='AppIcon'
+              Advertise='yes' />
+          </Component>
+        </Directory>
+      </StandardDirectory>
+      <StandardDirectory Id='ProgramMenuFolder' />
+    </Feature>
+  </Product>
+</Wix>

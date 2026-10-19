@@ -10,19 +10,9 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            binary: git-desktop-jorgenio
-            artifact: git-desktop-jorgenio-linux-x86_64
-          - os: windows-latest
-            binary: git-desktop-jorgenio.exe
-            artifact: git-desktop-jorgenio-windows-x86_64.exe
-    runs-on: ${{ matrix.os }}
+  linux:
+    name: Linux (binario + .deb + AppImage)
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
@@ -33,16 +23,38 @@ jobs:
       - name: Build release
         run: cargo build --release -p gitdesktop-app
 
-      - name: Preparar binario con nombre de plataforma
-        shell: bash
+      - name: Binario con nombre de plataforma
         run: |
           mkdir -p dist
-          cp "target/release/${{ matrix.binary }}" "dist/${{ matrix.artifact }}"
+          cp target/release/git-desktop-jorgenio dist/git-desktop-jorgenio-linux-x86_64
 
-      - name: Subir artefacto del workflow
+      - name: Empaquetar .deb
+        run: |
+          cargo install cargo-deb --locked
+          cargo deb -p gitdesktop-app --no-build \
+            --output dist/git-desktop-jorgenio-linux-x86_64.deb
+
+      - name: Empaquetar AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          mkdir -p AppDir/usr/bin \
+                   AppDir/usr/share/applications \
+                   AppDir/usr/share/icons/hicolor/128x128/apps
+          cp target/release/git-desktop-jorgenio AppDir/usr/bin/
+          cp packaging/linux/git-desktop-jorgenio.desktop \
+             AppDir/usr/share/applications/
+          cp assets/icon-128.png \
+             AppDir/usr/share/icons/hicolor/128x128/apps/git-desktop-jorgenio.png
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
+          mv Git-Desktop*.AppImage dist/git-desktop-jorgenio-linux-x86_64.AppImage
+
+      - name: Subir artefactos del workflow
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: git-desktop-jorgenio-linux
           path: dist/*
 
       - name: Publicar en el GitHub Release del tag
@@ -51,4 +63,47 @@ jobs:
           files: dist/*
           fail_on_unmatched_files: true
 
-# Nota (M5): instaladores — .deb/AppImage en Linux y MSI en Windows.
+  windows:
+    name: Windows (binario + MSI)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Asegurar WiX Toolset (para cargo-wix)
+        shell: pwsh
+        run: |
+          if (-not (Get-Command candle.exe -ErrorAction SilentlyContinue)) {
+            choco install wixtoolset -y --no-progress
+            "C:\Program Files (x86)\WiX Toolset v3.14\bin" |
+              Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+
+      - name: Instalar cargo-wix
+        run: cargo install cargo-wix --locked
+
+      - name: Build + MSI
+        run: cargo wix -p gitdesktop-app --nocapture --output dist
+
+      - name: Renombrar MSI
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Get-ChildItem dist -Filter *.msi | ForEach-Object {
+            Rename-Item $_.FullName "git-desktop-jorgenio-windows-x86_64.msi"
+          }
+
+      - name: Subir artefactos del workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: git-desktop-jorgenio-windows
+          path: dist/*
+
+      - name: Publicar en el GitHub Release del tag
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true

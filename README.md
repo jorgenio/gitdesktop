@@ -15,6 +15,30 @@ pull, push y merge sin tocar la terminal.
 - [x] Abrir repositorio y mostrar su estado (rama, ahead/behind, archivos modificados)
 - [ ] Stage/unstage, diffs, commits (M1)
 
+## Instalación
+
+### Ubuntu / Debian (`.deb`)
+
+```sh
+sudo dpkg -i git-desktop-jorgenio-linux-x86_64.deb
+# (si faltan dependencias: sudo apt -f install)
+```
+
+### Ubuntu / cualquier Linux (AppImage)
+
+```sh
+chmod +x git-desktop-jorgenio-linux-x86_64.AppImage
+./git-desktop-jorgenio-linux-x86_64.AppImage
+```
+
+### Windows (MSI)
+
+Descarga `git-desktop-jorgenio-windows-x86_64.msi` y ejecuta el instalador
+(crea accesos directos en el menú Inicio; el binario suelto `.exe` también
+funciona sin instalación).
+
+Los artefactos están en la [página de releases](https://github.com/jorgenio/gitdesktop/releases).
+
 ## Desarrollo
 
 ```sh

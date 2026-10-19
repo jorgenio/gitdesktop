@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Git-Desktop Jorgenio — icono de rama -->
+  <rect x="1" y="1" width="126" height="126" rx="24" fill="#0d1117" stroke="#30363d" stroke-width="2"/>
+  <line x1="75" y1="24" x2="75" y2="100" stroke="#2f81f7" stroke-width="7" stroke-linecap="round"/>
+  <path d="M 75 38 Q 48 48 48 76 L 48 92" fill="none" stroke="#2f81f7" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="75" cy="23" r="9" fill="#3fb950"/>
+  <circle cx="75" cy="102" r="9" fill="#2f81f7"/>
+  <circle cx="48" cy="95" r="7" fill="#f85149"/>
+</svg>

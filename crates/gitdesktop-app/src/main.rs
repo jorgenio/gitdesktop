@@ -15,6 +15,10 @@ pub fn main() -> iced::Result {
     iced::application(App::new, App::update, App::view)
         .title(App::title)
         .theme(|_state: &App| theme::gitdesktop())
+        .window(iced::window::Settings {
+            icon: Some(load_icon()),
+            ..Default::default()
+        })
         .window_size((1280.0, 800.0))
         // Sin decoraciones nativas: barra de título personalizada, como
         // GitHub Desktop para Windows (menús + controles propios).
@@ -22,4 +26,15 @@ pub fn main() -> iced::Result {
         .subscription(App::subscription)
         .centered()
         .run()
+}
+
+/// Icono de la app para la ventana/barra de tareas (PNG embebido).
+fn load_icon() -> iced::window::Icon {
+    let bytes = include_bytes!("../../../assets/icon-128.png");
+    let image = image::load_from_memory(bytes)
+        .expect("el icono embebido debe ser un PNG válido")
+        .to_rgba8();
+    let (width, height) = image.dimensions();
+    iced::window::icon::from_rgba(image.into_raw(), width, height)
+        .expect("el icono embebido tiene el tamaño declarado")
 }

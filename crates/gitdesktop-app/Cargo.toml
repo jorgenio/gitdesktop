@@ -16,3 +16,25 @@ iced = { workspace = true }
 rfd = { workspace = true }
 time = { workspace = true }
 tokio = { version = "1", features = ["process", "io-util"] }
+image = { workspace = true }
+
+[package.metadata.deb]
+maintainer = "Jorgenio <jorgenio@users.noreply.github.com>"
+copyright = "2026, Jorgenio"
+extended-description = """\
+Cliente Git de escritorio 100% en Rust con la filosofía de GitHub Desktop: \
+interfaz simple para gestionar cambios, commits, ramas, pull, push y merge \
+sin tocar la terminal.\
+"""
+depends = "$auto"
+section = "devel"
+priority = "optional"
+assets = [
+    ["target/release/git-desktop-jorgenio", "usr/bin/", "755"],
+    ["../../assets/icon-128.png", "usr/share/icons/hicolor/128x128/apps/git-desktop-jorgenio.png", "644"],
+    ["../../packaging/linux/git-desktop-jorgenio.desktop", "usr/share/applications/git-desktop-jorgenio.desktop", "644"],
+    ["../../LICENSE", "usr/share/doc/git-desktop-jorgenio/LICENSE", "644"],
+]
+
+[package.metadata.wix]
+icon = "../../assets/icon.ico"

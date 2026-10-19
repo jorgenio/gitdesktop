@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Git-Desktop Jorgenio
+GenericName=Cliente Git
+Comment=Gestor Git de escritorio en Rust, con la filosofía de GitHub Desktop
+Exec=git-desktop-jorgenio
+Icon=git-desktop-jorgenio
+Terminal=false
+Categories=Development;RevisionControl;
+Keywords=git;version control;repositorio;commit;push;pull;merge;
+StartupWMClass=git-desktop-jorgenio
