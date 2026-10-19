@@ -93,6 +93,7 @@ jobs:
           candle.exe crates\gitdesktop-app\wix\main.wxs `
             -arch x64 `
             "-dExePath=target\release\git-desktop-jorgenio.exe" `
+            "-dIconPath=assets\icon.ico" `
             "-dProductVersion=$version" `
             -out build\main.wixobj
           light.exe build\main.wixobj `
