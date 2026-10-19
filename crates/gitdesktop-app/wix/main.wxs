@@ -1,8 +1,9 @@
 <?xml version='1.0' encoding='windows-1252'?>
 <!--
-  Instalador MSI de Git-Desktop Jorgenio (WiX 3.x, consumido por cargo-wix).
-  cargo-wix define: $(var.ProductName), $(var.ProductVersion),
-  $(var.Manufacturer) y $(var.ExePath).
+  Instalador MSI de Git-Desktop Jorgenio (schema WiX 3.x, consumido por
+  candle/light en CI). Variables definidas por el workflow:
+  - $(var.ExePath)       ruta del ejecutable release
+  - $(var.ProductVersion) versión del tag (vX.Y.Z -> X.Y.Z)
 -->
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
   <Product
@@ -40,8 +41,11 @@
       Description='Instala el ejecutable y los accesos directos.'
       Level='1'
       Absent='disallow'>
+      <ComponentRef Id='MainExecutable' />
+    </Feature>
 
-      <StandardDirectory Id='ProgramFiles64Folder'>
+    <Directory Id='TARGETDIR' Name='SourceDir'>
+      <Directory Id='ProgramFiles64Folder'>
         <Directory Id='INSTALLFOLDER' Name='Git-Desktop Jorgenio'>
           <Component Id='MainExecutable' Guid='*'>
             <File
@@ -58,8 +62,8 @@
               Advertise='yes' />
           </Component>
         </Directory>
-      </StandardDirectory>
-      <StandardDirectory Id='ProgramMenuFolder' />
-    </Feature>
+      </Directory>
+      <Directory Id='ProgramMenuFolder' />
+    </Directory>
   </Product>
 </Wix>
