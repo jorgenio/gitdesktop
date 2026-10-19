@@ -4,6 +4,11 @@ on:
   push:
     tags: ["v*"]
 
+# El GITHUB_TOKEN necesita permiso de escritura para crear el release
+# y subir los binarios (por defecto es solo-lectura).
+permissions:
+  contents: write
+
 jobs:
   build:
     name: ${{ matrix.os }}
