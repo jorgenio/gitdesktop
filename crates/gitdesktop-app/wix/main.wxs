@@ -12,13 +12,13 @@
     Language='1033'
     Codepage='1252'
     Version='$(var.ProductVersion)'
-    Manufacturer='Jorgenio'
-    Architecture='x64'>
+    Manufacturer='Jorgenio'>
 
     <Package
       InstallerVersion='500'
       Compressed='yes'
       InstallScope='perMachine'
+      Platform='x64'
       Description='Cliente Git de escritorio en Rust'
       Manufacturer='Jorgenio' />
 
