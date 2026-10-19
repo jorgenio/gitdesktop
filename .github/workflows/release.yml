@@ -73,7 +73,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Asegurar WiX Toolset (para cargo-wix)
+      - name: Asegurar WiX Toolset
         shell: pwsh
         run: |
           if (-not (Get-Command candle.exe -ErrorAction SilentlyContinue)) {
@@ -82,19 +82,22 @@ jobs:
               Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           }
 
-      - name: Instalar cargo-wix
-        run: cargo install cargo-wix --locked
+      - name: Build release
+        run: cargo build --release -p gitdesktop-app
 
-      - name: Build + MSI
-        run: cargo wix -p gitdesktop-app --nocapture --output dist
-
-      - name: Renombrar MSI
+      - name: Empaquetar MSI (candle + light)
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Get-ChildItem dist -Filter *.msi | ForEach-Object {
-            Rename-Item $_.FullName "git-desktop-jorgenio-windows-x86_64.msi"
-          }
+          $version = "${env:GITHUB_REF_NAME}" -replace '^v', ''
+          New-Item -ItemType Directory -Force -Path build, dist | Out-Null
+          candle.exe crates\gitdesktop-app\wix\main.wxs `
+            -arch x64 `
+            "-dExePath=target\release\git-desktop-jorgenio.exe" `
+            "-dProductVersion=$version" `
+            -out build\main.wixobj
+          light.exe build\main.wixobj `
+            -ext WixUIExtension `
+            -o dist\git-desktop-jorgenio-windows-x86_64.msi
 
       - name: Subir artefactos del workflow
         uses: actions/upload-artifact@v4
