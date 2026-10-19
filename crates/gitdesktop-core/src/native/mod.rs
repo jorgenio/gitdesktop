@@ -7,9 +7,10 @@ mod status;
 
 use std::path::{Path, PathBuf};
 
+use crate::cli;
 use crate::engine::GitEngine;
 use crate::error::{GitoError, Result};
-use crate::models::{CommitSummary, DiffLine, FileEntry, RepoStatus};
+use crate::models::{BranchInfo, CommitSummary, DiffLine, FileEntry, MergeOutcome, RepoStatus};
 
 /// Motor basado en libgit2. Dueño exclusivo de un `git2::Repository`.
 ///
@@ -90,4 +91,84 @@ impl GitEngine for NativeEngine {
     fn commit_diff(&self, commit_id: &str, path: &str) -> Result<Vec<DiffLine>> {
         log::commit_diff(&self.repo, commit_id, path)
     }
+
+    fn branches(&self) -> Result<Vec<BranchInfo>> {
+        let mut branches = Vec::new();
+        for entry in self.repo.branches(Some(git2::BranchType::Local))? {
+            let (branch, _) = entry?;
+            let Some(name) = branch.name()? else {
+                continue;
+            };
+            branches.push(BranchInfo {
+                name: name.to_owned(),
+                is_current: branch.is_head(),
+            });
+        }
+        Ok(branches)
+    }
+
+    fn create_branch(&self, name: &str) -> Result<()> {
+        branch_cli(&self.path, &["switch", "-c", name])
+    }
+
+    fn switch_branch(&self, name: &str) -> Result<()> {
+        branch_cli(&self.path, &["switch", name])
+    }
+
+    fn delete_branch(&self, name: &str) -> Result<()> {
+        branch_cli(&self.path, &["branch", "-D", name])
+    }
+
+    fn merge(&self, name: &str) -> Result<MergeOutcome> {
+        branch_cli(&self.path, &["merge", "--no-edit", name])?;
+
+        // ¿Dejó conflictos? (el status marca CONFLICTED en el workdir)
+        let conflicted = self
+            .status()?
+            .entries
+            .iter()
+            .filter(|entry| entry.status == crate::models::FileStatus::Conflicted)
+            .map(|entry| entry.path.clone())
+            .collect::<Vec<_>>();
+
+        if conflicted.is_empty() {
+            Ok(MergeOutcome::Merged)
+        } else {
+            Ok(MergeOutcome::Conflicts(conflicted))
+        }
+    }
+
+    fn abort_merge(&self) -> Result<()> {
+        branch_cli(&self.path, &["merge", "--abort"])
+    }
+
+    fn commit_merge(&self) -> Result<()> {
+        branch_cli(&self.path, &["commit", "--no-edit"])
+    }
+}
+
+/// Ejecuta git CLI y traduce los errores con el mensaje real de git.
+fn branch_cli(repo: &Path, args: &[&str]) -> Result<()> {
+    let output = cli::run(repo, args)
+        .map_err(|e| GitoError::GitCli(format!("no se pudo ejecutar git: {e}")))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let text = last_line(&stderr).unwrap_or_else(|| last_line(&stdout).unwrap_or_default());
+    Err(GitoError::GitCli(if text.is_empty() {
+        format!("git {} falló", args.join(" "))
+    } else {
+        text
+    }))
+}
+
+/// Última línea no vacía de un texto (git deja el error al final).
+fn last_line(text: &str) -> Option<String> {
+    text.lines()
+        .rev()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(str::to_owned)
 }

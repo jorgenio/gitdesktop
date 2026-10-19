@@ -48,8 +48,14 @@ pub(super) fn status(repo: &git2::Repository) -> Result<RepoStatus> {
         behind,
         has_upstream,
         has_remote,
+        merging: merge_in_progress(repo),
         entries,
     })
+}
+
+/// `true` si hay un merge en curso (MERGE_HEAD pendiente de confirmar).
+fn merge_in_progress(repo: &git2::Repository) -> bool {
+    repo.path().join("MERGE_HEAD").exists()
 }
 
 fn entry_path(entry: &git2::StatusEntry<'_>) -> String {

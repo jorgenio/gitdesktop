@@ -22,5 +22,5 @@ mod native;
 pub use cli::{NetOpKind, Progress};
 pub use engine::{GitEngine, open};
 pub use error::{GitoError, Result};
-pub use models::{BranchInfo, CommitSummary, DiffLine, DiffLineKind, FileEntry, FileStatus, RepoStatus};
+pub use models::{BranchInfo, CommitSummary, DiffLine, DiffLineKind, FileEntry, MergeOutcome, FileStatus, RepoStatus};
 pub use store::{RepoEntry, RepoStore, StoreData, TomlStore, UiState, WindowState};

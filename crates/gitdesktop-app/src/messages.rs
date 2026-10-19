@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use gitdesktop_core::{CommitSummary, DiffLine, FileEntry, RepoStatus};
+use gitdesktop_core::{BranchInfo, CommitSummary, DiffLine, RepoStatus};
 use iced::widget::text_editor;
 
 /// Pestaña activa del panel izquierdo.
@@ -12,10 +12,6 @@ pub enum Tab {
     History,
 }
 
-impl Tab {
-    // La UI construye sus etiquetas directamente; no requiere helpers.
-}
-
 /// Operación sobre el índice/workdir cuya finalización se reporta.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Op {
@@ -23,15 +19,27 @@ pub enum Op {
     Unstage,
     Discard,
     Commit,
+    MergeCommit,
+}
+
+/// Resultado de una operación de rama (para el banner y el refresco).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BranchOpResult {
+    Created,
+    Switched,
+    Deleted,
 }
 
 /// Acciones disponibles en el menú principal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuAction {
     OpenRepository,
+    Clone,
     Refresh,
     ShowChanges,
     ShowHistory,
+    NewBranch,
+    MergeBranches,
     About,
     Quit,
 }
@@ -75,17 +83,45 @@ pub enum Message {
     // ——— Pestaña Historial ———
     LogLoaded(Result<Vec<CommitSummary>, String>),
     CommitSelected(String),
-    CommitFilesLoaded(Result<(String, Vec<FileEntry>), String>),
+    CommitFilesLoaded(Result<(String, Vec<gitdesktop_core::FileEntry>), String>),
     CommitFileSelected(String),
     CommitDiffLoaded(Result<(String, String, Vec<DiffLine>), String>),
 
-    ClearError,
+    // ——— Ramas (M4) ———
+    BranchModalToggled(bool),
+    BranchesLoaded(Result<Vec<BranchInfo>, String>),
+    NewBranchNameChanged(String),
+    BranchCreatePressed,
+    BranchSwitch(String),
+    BranchDeleteRequested(String),
+    BranchDeleteConfirmed,
+    BranchCancelDelete,
+    BranchDone(BranchOpResult, Result<(), String>),
 
-    // ——— Red (fetch/pull/push vía CLI git) ———
+    // ——— Merge (M4) ———
+    MergeModalToggled(bool),
+    MergeTargetPicked(Option<String>),
+    MergePressed,
+    MergeDone(Result<gitdesktop_core::MergeOutcome, String>),
+    MergeCommitPressed,
+    MergeAborted,
+
+    // ——— Clone (M4) ———
+    CloneModalToggled(bool),
+    CloneUrlChanged(String),
+    /// Abre el diálogo nativo de carpeta de destino.
+    ClonePickFolder,
+    CloneDestPicked(Option<PathBuf>),
+    ClonePressed,
+
+    // ——— Red (fetch/pull/push/clone vía CLI git) ———
     /// Inicia una operación de red (botón contextual de la cabecera).
     NetStart(gitdesktop_core::NetOpKind),
     /// Progreso intermedio de la operación en curso.
     NetProgress(gitdesktop_core::Progress),
     /// Operación terminada (Ok con resumen o Err con mensaje de git).
     NetDone(gitdesktop_core::NetOpKind, Result<String, String>),
+
+    ClearError,
+    ClearNotice,
 }

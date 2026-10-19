@@ -5,13 +5,13 @@ use std::time::Duration;
 use std::time::Instant;
 
 use gitdesktop_core::{
-    CommitSummary, DiffLine, FileEntry, NetOpKind, Progress, RepoEntry, RepoStatus, RepoStore,
-    StoreData, TomlStore,
+    BranchInfo, CommitSummary, DiffLine, FileEntry, MergeOutcome, NetOpKind, Progress, RepoEntry,
+    RepoStatus, RepoStore, StoreData, TomlStore,
 };
 use iced::widget::text_editor;
 use time::OffsetDateTime;
 
-use crate::messages::{MenuAction, Message, Op, Tab};
+use crate::messages::{BranchOpResult, MenuAction, Message, Op, Tab};
 
 /// Límite de commits cargados en el historial.
 const LOG_LIMIT: usize = 200;
@@ -46,13 +46,27 @@ pub struct App {
     pub repo: Option<OpenRepo>,
 
     pub error: Option<String>,
+    pub notice: Option<String>,
     pub loading: bool,
     pub tab: Tab,
 
-    // Red (fetch/pull/push)
+    // Red (fetch/pull/push/clone)
     pub running_op: Option<NetRun>,
     pub net_progress: Option<Progress>,
     pub last_fetch: Option<Instant>,
+
+    // Ramas (M4)
+    pub branches: Vec<BranchInfo>,
+    pub branch_modal: bool,
+    pub new_branch_name: String,
+    pub pending_delete_branch: Option<String>,
+    pub merge_modal: bool,
+    pub merge_target: Option<String>,
+
+    // Clone (M4)
+    pub clone_modal: bool,
+    pub clone_url: String,
+    pub clone_folder: Option<PathBuf>,
 
     // Cromo personalizado (barra de título + menús)
     pub open_menu: Option<usize>,
@@ -112,11 +126,21 @@ impl App {
                 data,
                 repo: None,
                 error: warning,
+                notice: None,
                 loading: false,
                 tab: Tab::Changes,
                 running_op: None,
                 net_progress: None,
                 last_fetch: None,
+                branches: Vec::new(),
+                branch_modal: false,
+                new_branch_name: String::new(),
+                pending_delete_branch: None,
+                merge_modal: false,
+                merge_target: None,
+                clone_modal: false,
+                clone_url: String::new(),
+                clone_folder: None,
                 open_menu: None,
                 about: false,
                 maximized: false,
@@ -166,7 +190,7 @@ impl App {
             subs.push(crate::subscriptions::network_op(
                 run.path.clone(),
                 run.branch.clone(),
-                run.kind,
+                run.kind.clone(),
             ));
         }
 
@@ -194,6 +218,10 @@ impl App {
                         self.loading = true;
                         iced::Task::perform(pick_folder(), Message::FolderPicked)
                     }
+                    MenuAction::Clone => {
+                        self.clone_modal = true;
+                        iced::Task::none()
+                    }
                     MenuAction::Refresh => {
                         self.last_refresh = None;
                         self.refresh()
@@ -205,6 +233,16 @@ impl App {
                     MenuAction::ShowHistory => {
                         self.tab = Tab::History;
                         self.ensure_log()
+                    }
+                    MenuAction::NewBranch => {
+                        self.new_branch_name.clear();
+                        self.branch_modal = true;
+                        self.load_branches()
+                    }
+                    MenuAction::MergeBranches => {
+                        self.merge_modal = true;
+                        self.merge_target = None;
+                        self.load_branches()
                     }
                     MenuAction::About => {
                         self.about = true;
@@ -433,6 +471,10 @@ impl App {
                 self.error = None;
                 iced::Task::none()
             }
+            Message::ClearNotice => {
+                self.notice = None;
+                iced::Task::none()
+            }
 
             // ——— Red (fetch/pull/push) ———
             Message::NetStart(kind) => self.start_net(kind),
@@ -450,8 +492,187 @@ impl App {
                     Ok(_summary) => self.error = None,
                     Err(err) => self.error = Some(err),
                 }
+                // Un clone exitoso abre directamente el repo recién clonado.
+                if let NetOpKind::Clone { dest, .. } = &kind {
+                    return open_task(dest.clone());
+                }
                 self.last_refresh = None;
                 self.refresh()
+            }
+
+            // ——— Ramas ———
+            Message::BranchModalToggled(open) => {
+                self.branch_modal = open;
+                if open {
+                    self.load_branches()
+                } else {
+                    iced::Task::none()
+                }
+            }
+            Message::BranchesLoaded(result) => match result {
+                Ok(branches) => {
+                    self.branches = branches;
+                    iced::Task::none()
+                }
+                Err(err) => {
+                    self.error = Some(err);
+                    iced::Task::none()
+                }
+            },
+            Message::NewBranchNameChanged(name) => {
+                self.new_branch_name = name;
+                iced::Task::none()
+            }
+            Message::BranchCreatePressed => {
+                let name = self.new_branch_name.trim().to_owned();
+                if name.is_empty() {
+                    return iced::Task::none();
+                }
+                self.loading = true;
+                match self.repo_path() {
+                    Some(repo_path) => branch_task(
+                        repo_path,
+                        BranchOpResult::Created,
+                        move |engine| engine.create_branch(&name),
+                    ),
+                    None => {
+                        self.loading = false;
+                        iced::Task::none()
+                    }
+                }
+            }
+            Message::BranchSwitch(name) => {
+                self.loading = true;
+                match self.repo_path() {
+                    Some(repo_path) => branch_task(
+                        repo_path,
+                        BranchOpResult::Switched,
+                        move |engine| engine.switch_branch(&name),
+                    ),
+                    None => {
+                        self.loading = false;
+                        iced::Task::none()
+                    }
+                }
+            }
+            Message::BranchDeleteRequested(name) => {
+                self.pending_delete_branch = Some(name);
+                iced::Task::none()
+            }
+            Message::BranchDeleteConfirmed => {
+                match (self.repo_path(), self.pending_delete_branch.take()) {
+                    (Some(repo_path), Some(name)) => {
+                        self.loading = true;
+                        branch_task(
+                            repo_path,
+                            BranchOpResult::Deleted,
+                            move |engine| engine.delete_branch(&name),
+                        )
+                    }
+                    _ => iced::Task::none(),
+                }
+            }
+            Message::BranchCancelDelete => {
+                self.pending_delete_branch = None;
+                iced::Task::none()
+            }
+            Message::BranchDone(_op, result) => self.on_branch_done(result),
+
+            // ——— Merge ———
+            Message::MergeModalToggled(open) => {
+                self.merge_modal = open;
+                if open {
+                    self.merge_target = None;
+                    self.load_branches()
+                } else {
+                    iced::Task::none()
+                }
+            }
+            Message::MergeTargetPicked(target) => {
+                self.merge_target = target;
+                iced::Task::none()
+            }
+            Message::MergePressed => {
+                let Some(target) = self.merge_target.clone() else {
+                    return iced::Task::none();
+                };
+                let Some(repo_path) = self.repo_path() else {
+                    return iced::Task::none();
+                };
+                self.loading = true;
+                merge_task(repo_path, target)
+            }
+            Message::MergeDone(result) => self.on_merge_done(result),
+            Message::MergeCommitPressed => {
+                self.loading = true;
+                match self.repo_path() {
+                    Some(repo_path) => {
+                        op_task(repo_path, Op::MergeCommit, |engine| engine.commit_merge())
+                    }
+                    None => {
+                        self.loading = false;
+                        iced::Task::none()
+                    }
+                }
+            }
+            Message::MergeAborted => {
+                self.loading = true;
+                match self.repo_path() {
+                    Some(repo_path) => abort_task(repo_path),
+                    None => {
+                        self.loading = false;
+                        iced::Task::none()
+                    }
+                }
+            }
+
+            // ——— Clone ———
+            Message::CloneModalToggled(open) => {
+                self.clone_modal = open;
+                iced::Task::none()
+            }
+            Message::CloneUrlChanged(url) => {
+                self.clone_url = url;
+                iced::Task::none()
+            }
+            Message::CloneDestPicked(folder) => {
+                self.clone_folder = folder;
+                iced::Task::none()
+            }
+            Message::ClonePickFolder => {
+                iced::Task::perform(pick_folder(), Message::CloneDestPicked)
+            }
+            Message::ClonePressed => {
+                if self.running_op.is_some() {
+                    return iced::Task::none();
+                }
+                let url = self.clone_url.trim().to_owned();
+                let Some(folder) = self.clone_folder.clone() else {
+                    self.error = Some("Elige la carpeta de destino para el clon.".into());
+                    return iced::Task::none();
+                };
+                if url.is_empty() {
+                    self.error = Some("Escribe la URL del repositorio a clonar.".into());
+                    return iced::Task::none();
+                }
+                // Destino final = carpeta elegida + nombre derivado de la URL.
+                let name = url
+                    .trim_end_matches('/')
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or("repo")
+                    .trim_end_matches(".git")
+                    .to_owned();
+                let name = if name.is_empty() { "repo".into() } else { name };
+                let dest = folder.join(name);
+
+                self.net_progress = None;
+                self.running_op = Some(NetRun {
+                    path: dest.clone(),
+                    branch: String::new(),
+                    kind: NetOpKind::Clone { url, dest },
+                });
+                iced::Task::none()
             }
         }
     }
@@ -485,6 +706,8 @@ impl App {
             self.commit_files.clear();
             self.selected_commit_file = None;
             self.commit_diff = None;
+            self.branches.clear();
+            self.notice = None;
         }
 
         self.data.touch_repo(&path, OffsetDateTime::now_utc());
@@ -504,8 +727,9 @@ impl App {
             tasks.push(diff_task(path.clone(), file, staged));
         }
         if self.tab == Tab::History {
-            tasks.push(log_task(path));
+            tasks.push(log_task(path.clone()));
         }
+        tasks.push(branches_task(path));
         iced::Task::batch(tasks)
     }
 
@@ -514,9 +738,11 @@ impl App {
         match result {
             Ok(()) => {
                 self.error = None;
-                if op == Op::Commit {
-                    self.summary.clear();
-                    self.description = text_editor::Content::new();
+                if matches!(op, Op::Commit | Op::MergeCommit) {
+                    if op == Op::Commit {
+                        self.summary.clear();
+                        self.description = text_editor::Content::new();
+                    }
                     self.selected = None;
                     self.diff = None;
                 }
@@ -527,6 +753,83 @@ impl App {
                 self.error = Some(err);
                 iced::Task::none()
             }
+        }
+    }
+
+    /// Tras crear/cambiar/eliminar una rama: cierra modal y refresca todo.
+    fn on_branch_done(&mut self, result: Result<(), String>) -> iced::Task<Message> {
+        self.loading = false;
+        match result {
+            Ok(()) => {
+                self.error = None;
+                self.notice = None;
+                self.branch_modal = false;
+                self.pending_delete_branch = None;
+                self.selected = None;
+                self.diff = None;
+                self.last_refresh = None;
+                let refresh = self.refresh();
+                match self.repo_path() {
+                    Some(path) => iced::Task::batch([refresh, branches_task(path)]),
+                    None => refresh,
+                }
+            }
+            Err(err) => {
+                self.error = Some(err);
+                iced::Task::none()
+            }
+        }
+    }
+
+    /// Tras un merge: banners según el resultado y refresco completo.
+    fn on_merge_done(&mut self, result: Result<MergeOutcome, String>) -> iced::Task<Message> {
+        self.loading = false;
+        match result {
+            Ok(MergeOutcome::Conflicts(files)) => {
+                self.error = Some(format!(
+                    "El merge dejó conflictos en {} archivo(s): {}. Edítalos, \
+                     márcalos como resueltos con el checkbox y pulsa «Confirmar merge».",
+                    files.len(),
+                    files.join(", ")
+                ));
+                self.after_merge_refresh()
+            }
+            Ok(outcome) => {
+                self.error = None;
+                self.notice = Some(match outcome {
+                    MergeOutcome::Merged => "Merge realizado con commit de fusión.".into(),
+                    MergeOutcome::FastForward => "Fusión fast-forward aplicada.".into(),
+                    MergeOutcome::UpToDate => "Todo ya estaba integrado; nada que fusionar.".into(),
+                    MergeOutcome::Aborted => {
+                        "Merge abortado: el repositorio volvió a su estado anterior.".into()
+                    }
+                    MergeOutcome::Conflicts(_) => unreachable!("manejado arriba"),
+                });
+                self.after_merge_refresh()
+            }
+            Err(err) => {
+                self.error = Some(err);
+                iced::Task::none()
+            }
+        }
+    }
+
+    fn after_merge_refresh(&mut self) -> iced::Task<Message> {
+        self.selected = None;
+        self.diff = None;
+        self.last_refresh = None;
+        let refresh = self.refresh();
+        match self.repo_path() {
+            Some(path) => iced::Task::batch([refresh, branches_task(path)]),
+            None => refresh,
+        }
+    }
+
+    /// Recarga la lista de ramas.
+    fn load_branches(&mut self) -> iced::Task<Message> {
+        match self.repo_path() {
+            Some(path) => branches_task(path),
+            None => iced::Task::none(),
         }
     }
 
@@ -722,4 +1025,56 @@ async fn pick_folder() -> Option<PathBuf> {
         .pick_folder()
         .await
         .map(|handle| handle.path().to_path_buf())
+}
+
+/// Recarga la lista de ramas del repositorio.
+fn branches_task(path: PathBuf) -> iced::Task<Message> {
+    iced::Task::perform(
+        async move {
+            let engine = gitdesktop_core::open(&path).map_err(|err| err.to_string())?;
+            engine.branches().map_err(|err| err.to_string())
+        },
+        Message::BranchesLoaded,
+    )
+}
+
+/// Ejecuta una operación de rama (crear/cambiar/eliminar).
+fn branch_task<F>(
+    path: PathBuf,
+    result: BranchOpResult,
+    f: F,
+) -> iced::Task<Message>
+where
+    F: FnOnce(&dyn gitdesktop_core::GitEngine) -> gitdesktop_core::Result<()> + Send + 'static,
+{
+    iced::Task::perform(
+        async move {
+            let engine = gitdesktop_core::open(&path).map_err(|err| err.to_string())?;
+            f(engine.as_ref()).map_err(|err| err.to_string())
+        },
+        move |outcome| Message::BranchDone(result, outcome),
+    )
+}
+
+/// Fusiona otra rama en la actual.
+fn merge_task(path: PathBuf, name: String) -> iced::Task<Message> {
+    iced::Task::perform(
+        async move {
+            let engine = gitdesktop_core::open(&path).map_err(|err| err.to_string())?;
+            engine.merge(&name).map_err(|err| err.to_string())
+        },
+        Message::MergeDone,
+    )
+}
+
+/// Abandona el merge en curso.
+fn abort_task(path: PathBuf) -> iced::Task<Message> {
+    iced::Task::perform(
+        async move {
+            let engine = gitdesktop_core::open(&path).map_err(|err| err.to_string())?;
+            engine.abort_merge().map_err(|err| err.to_string())?;
+            Ok(MergeOutcome::Aborted)
+        },
+        Message::MergeDone,
+    )
 }

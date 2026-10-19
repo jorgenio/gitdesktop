@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::error::Result;
-use crate::models::{CommitSummary, DiffLine, FileEntry, RepoStatus};
+use crate::models::{BranchInfo, CommitSummary, DiffLine, FileEntry, MergeOutcome, RepoStatus};
 use crate::native::NativeEngine;
 
 /// Motor de operaciones Git para un repositorio abierto.
@@ -52,6 +52,29 @@ pub trait GitEngine: Send {
 
     /// Diff unificado de un archivo dentro de un commit.
     fn commit_diff(&self, commit_id: &str, path: &str) -> Result<Vec<DiffLine>>;
+
+    // ——— Ramas y fusión (M4) ———————————————————————————————————————
+
+    /// Ramas locales, con la actual marcada.
+    fn branches(&self) -> Result<Vec<BranchInfo>>;
+
+    /// Crea una rama y cambia a ella (`git switch -c`).
+    fn create_branch(&self, name: &str) -> Result<()>;
+
+    /// Cambia a una rama existente (`git switch`).
+    fn switch_branch(&self, name: &str) -> Result<()>;
+
+    /// Elimina una rama local (`git branch -D`).
+    fn delete_branch(&self, name: &str) -> Result<()>;
+
+    /// Fusiona `name` en la rama actual (`git merge --no-edit`).
+    fn merge(&self, name: &str) -> Result<MergeOutcome>;
+
+    /// Abandona el merge en curso (`git merge --abort`).
+    fn abort_merge(&self) -> Result<()>;
+
+    /// Confirma el merge tras resolver conflictos (`git commit --no-edit`).
+    fn commit_merge(&self) -> Result<()>;
 }
 
 /// Abre un repositorio existente con el motor nativo (libgit2).

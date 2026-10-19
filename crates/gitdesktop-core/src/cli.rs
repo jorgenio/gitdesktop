@@ -9,11 +9,11 @@
 //! Las operaciones locales (status, diff, commit, stage…) siguen en
 //! libgit2 dentro de [`crate::native`].
 
-use std::path::Path;
-use std::process::{Command, Stdio};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output, Stdio};
 
 /// Tipos de operación de red disponibles.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NetOpKind {
     /// `git fetch --all --prune`.
     Fetch,
@@ -21,6 +21,8 @@ pub enum NetOpKind {
     Pull,
     /// `git push`; con `publish` añade `--set-upstream` (primera vez).
     Push { publish: bool },
+    /// `git clone --progress <url> <dest>`.
+    Clone { url: String, dest: PathBuf },
 }
 
 /// Progreso reportado por `git --progress` (vía stderr).
@@ -59,13 +61,31 @@ pub fn build_command(kind: NetOpKind, repo: &Path, branch: &str) -> Command {
         NetOpKind::Push { publish: false } => {
             command.args(["push", "--progress", "origin", branch]);
         }
+        NetOpKind::Clone { url, dest } => {
+            let dest = dest.display().to_string();
+            let parent = Path::new(&dest)
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| Path::new(".").to_path_buf());
+            command.current_dir(parent);
+            command.args(["clone", "--progress", &url, &dest]);
+        }
     }
 
     command
 }
 
-/// Extrae `Progress` de una línea de stderr de `git --progress`.
-///
+/// Ejecuta `git` síncrono y captura salida (operaciones rápidas de
+/// ramas/merge; el progreso largo va por la ruta async de `subscriptions`).
+pub fn run(repo: &Path, args: &[&str]) -> std::io::Result<Output> {
+    Command::new("git")
+        .current_dir(repo)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .args(args)
+        .output()
+}
+
+/// Extrae `Progress` de una línea de stderr de `git --progress`.///
 /// git escribe el progreso con separadores `\r`: de una lectura pueden
 /// llegar varias actualizaciones; nos quedamos con la última (la más
 /// reciente). Ejemplos:

@@ -1,13 +1,13 @@
 //! Vistas: pantalla de bienvenida, vista principal de repositorio y
-//! modales (menú desplegable, Acerca de, confirmación de descarte).
+//! modales (menú, Acerca de, descartar, ramas, merge, clone).
 
 pub mod changes;
 pub mod diff_view;
 pub mod history;
 pub mod titlebar;
 
-use iced::widget::{button, center, column, container, mouse_area, row, rule, space, text, Stack};
-use iced::{Alignment, Element, Fill, Length, Padding};
+use iced::widget::{button, center, column, container, mouse_area, pick_list, row, rule, scrollable, space, text, text_input, Stack};
+use iced::{Alignment, Element, Fill, Length};
 
 use crate::messages::{Message, Tab};
 use crate::state::{App, OpenRepo};
@@ -17,6 +17,7 @@ use crate::theme;
 pub fn view(app: &App) -> Element<'_, Message> {
     column![
         titlebar::bar(app),
+        notice_banner(app),
         error_banner(app),
         Stack::with_children(vec![
             body(app),
@@ -71,11 +72,7 @@ fn header<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
                 .padding([6, 10])
                 .style(button::text),
             space::horizontal(),
-            column![
-                text("Rama actual").size(10).style(theme::muted),
-                text(branch_label(open)).size(15),
-            ]
-            .spacing(2),
+            branch_button(open),
             space::horizontal(),
             sync_button(app, open),
         ]
@@ -135,11 +132,7 @@ fn sync_button<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
         ]
         .spacing(2),
     )
-    .on_press_maybe(
-        action
-            .filter(|_| actionable)
-            .map(Message::NetStart),
-    )
+    .on_press_maybe(action.filter(|_| actionable).map(Message::NetStart))
     .padding([6, 14])
     .style(if actionable {
         button::primary
@@ -149,29 +142,22 @@ fn sync_button<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
     .into()
 }
 
-/// Texto humano para "última sincronización hace X".
-fn ago_text(then: std::time::Instant) -> String {
-    let seconds = then.elapsed().as_secs();
-    if seconds < 45 {
-        "hace unos segundos".to_owned()
-    } else if seconds < 3600 {
-        format!("hace {} min", seconds / 60)
-    } else {
-        format!("hace {} h", seconds / 3600)
-    }
+/// Botón de rama en la cabecera: abre el gestor de ramas.
+fn branch_button(open: &OpenRepo) -> Element<'static, Message> {
+    button(
+        column![
+            text("Rama actual").size(10).style(theme::muted),
+            text(branch_label(open)).size(15),
+        ]
+        .spacing(2),
+    )
+    .on_press(Message::BranchModalToggled(true))
+    .padding([6, 10])
+    .style(button::text)
+    .into()
 }
 
-/// Etiqueta de la rama actual en la cabecera.
-fn branch_label(open: &OpenRepo) -> String {
-    if open.status.head_detached {
-        format!("{} (detached)", open.status.branch)
-    } else if open.status.branch.is_empty() {
-        "(sin commits aún)".to_owned()
-    } else {
-        open.status.branch.clone()
-    }
-}
-
+/// Panel lateral: pestañas Cambios/Historial + contenido.
 fn sidebar<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
     let tabs = row![
         tab_button(app.tab, Tab::Changes, format!("Cambios ({})", open.status.entries.len())),
@@ -187,12 +173,6 @@ fn sidebar<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
     container(
         column![tabs, rule::horizontal(1), content].width(Fill).height(Fill),
     )
-    .padding(Padding {
-        top: 0.0,
-        right: 0.0,
-        bottom: 0.0,
-        left: 0.0,
-    })
     .style(theme::sidebar)
     .width(Length::Fixed(380.0))
     .height(Fill)
@@ -254,11 +234,16 @@ fn welcome(app: &App) -> Element<'_, Message> {
         text("Tu gestor de Git, rápido y sin terminal.")
             .size(14)
             .style(theme::muted),
-        button(text("Abrir repositorio…").size(14).align_x(Alignment::Center).width(Fill))
-            .on_press(Message::OpenFolderDialog)
-            .padding([10, 18])
-            .width(Length::Fixed(260.0))
-            .style(button::primary),
+        button(
+            text("Abrir repositorio…")
+                .size(14)
+                .align_x(Alignment::Center)
+                .width(Fill),
+        )
+        .on_press(Message::OpenFolderDialog)
+        .padding([10, 18])
+        .width(Length::Fixed(260.0))
+        .style(button::primary),
         recents,
     ]
     .spacing(16)
@@ -269,7 +254,7 @@ fn welcome(app: &App) -> Element<'_, Message> {
 
 // ————————————————————————————— modales ————————————————————————————————
 
-/// Acerca de… y confirmación de descarte.
+/// Todos los modales, por prioridad.
 fn modals(app: &App) -> Element<'_, Message> {
     if app.about {
         return about_modal();
@@ -277,18 +262,33 @@ fn modals(app: &App) -> Element<'_, Message> {
     if let Some(path) = &app.pending_discard {
         return discard_modal(path);
     }
+    if let Some(branch) = &app.pending_delete_branch {
+        return delete_branch_modal(branch);
+    }
+    if app.branch_modal {
+        return branch_modal(app);
+    }
+    if app.merge_modal {
+        return merge_modal(app);
+    }
+    if app.clone_modal {
+        return clone_modal(app);
+    }
     column![].into()
 }
 
-fn about_modal() -> Element<'static, Message> {
-    let scrim = mouse_area(
+fn modal_scrim(message: Message) -> Element<'static, Message> {
+    mouse_area(
         container(space::Space::new().width(Fill).height(Fill))
             .width(Fill)
             .height(Fill)
             .style(theme::scrim),
     )
-    .on_press(Message::AboutToggled(false));
+    .on_press(message)
+    .into()
+}
 
+fn about_modal() -> Element<'static, Message> {
     let card = container(
         column![
             text("Git-Desktop Jorgenio").size(22),
@@ -316,51 +316,26 @@ fn about_modal() -> Element<'static, Message> {
     .style(theme::panel);
 
     Stack::with_children(vec![
-        scrim.into(),
+        modal_scrim(Message::AboutToggled(false)).into(),
         center(card).width(Fill).height(Fill).into(),
     ])
     .into()
 }
 
 fn discard_modal(path: &str) -> Element<'static, Message> {
-    let _ = path; // el mensaje lleva la ruta capturada abajo
     let path_owned = path.to_owned();
-
-    let scrim = mouse_area(
-        container(space::Space::new().width(Fill).height(Fill))
-            .width(Fill)
-            .height(Fill)
-            .style(theme::scrim),
-    )
-    .on_press(Message::CancelDiscard);
 
     let card = container(
         column![
             text("¿Descartar los cambios?").size(18),
-            text(format!("Se perderán los cambios sin preparar de:\n{path_owned}"))
-                .size(12)
-                .style(theme::muted),
+            text(format!(
+                "Se perderán los cambios sin preparar de:\n{path_owned}"
+            ))
+            .size(12)
+            .style(theme::muted),
             row![
-                button(
-                    text("Cancelar")
-                        .size(13)
-                        .align_x(Alignment::Center)
-                        .width(Fill),
-                )
-                .on_press(Message::CancelDiscard)
-                .padding([8, 0])
-                .width(Fill)
-                .style(button::text),
-                button(
-                    text("Descartar")
-                        .size(13)
-                        .align_x(Alignment::Center)
-                        .width(Fill),
-                )
-                .on_press(Message::ConfirmDiscard)
-                .padding([8, 0])
-                .width(Fill)
-                .style(button::danger),
+                dialog_button("Cancelar", Message::CancelDiscard, button::text),
+                dialog_button("Descartar", Message::ConfirmDiscard, button::danger),
             ]
             .spacing(10),
         ]
@@ -371,13 +346,289 @@ fn discard_modal(path: &str) -> Element<'static, Message> {
     .style(theme::panel);
 
     Stack::with_children(vec![
-        scrim.into(),
+        modal_scrim(Message::CancelDiscard).into(),
         center(card).width(Fill).height(Fill).into(),
     ])
     .into()
 }
 
-// ————————————————————————————— utilidades ————————————————————————————————
+/// Confirmación de borrado de rama.
+fn delete_branch_modal(branch: &str) -> Element<'static, Message> {
+    let card = container(
+        column![
+            text("¿Eliminar la rama?").size(18),
+            text(format!(
+                "Se eliminará la rama local «{branch}».\nLos commits podrían perderse si no están fusionados."
+            ))
+            .size(12)
+            .style(theme::muted),
+            row![
+                dialog_button("Cancelar", Message::BranchCancelDelete, button::text),
+                dialog_button("Eliminar", Message::BranchDeleteConfirmed, button::danger),
+            ]
+            .spacing(10),
+        ]
+        .spacing(12)
+        .max_width(380),
+    )
+    .padding(24)
+    .style(theme::panel);
+
+    Stack::with_children(vec![
+        modal_scrim(Message::BranchCancelDelete).into(),
+        center(card).width(Fill).height(Fill).into(),
+    ])
+    .into()
+}
+
+/// Gestor de ramas: crear, cambiar y eliminar.
+fn branch_modal(app: &App) -> Element<'_, Message> {
+    let can_create = !app.new_branch_name.trim().is_empty();
+
+    let mut list = column![].spacing(2);
+    for branch in &app.branches {
+        let mut item = row![
+            text(if branch.is_current {
+                format!("✓ {}", branch.name)
+            } else {
+                branch.name.clone()
+            })
+            .size(13)
+            .width(Fill),
+        ]
+        .spacing(6)
+        .align_y(Alignment::Center);
+
+        if !branch.is_current {
+            item = item.push(
+                button(text("Usar").size(11))
+                    .on_press(Message::BranchSwitch(branch.name.clone()))
+                    .padding([3, 8])
+                    .style(theme::menu_item),
+            );
+            item = item.push(
+                button(text("Borrar").size(11).style(theme::muted))
+                    .on_press(Message::BranchDeleteRequested(branch.name.clone()))
+                    .padding([3, 8])
+                    .style(theme::menu_item),
+            );
+        }
+        list = list.push(container(item).width(Fill).padding([3, 4]));
+    }
+
+    let card = container(
+        column![
+            text("Ramas").size(18),
+            row![
+                text_input("nombre-de-la-rama", &app.new_branch_name)
+                    .on_input(Message::NewBranchNameChanged)
+                    .on_submit(Message::BranchCreatePressed)
+                    .size(13)
+                    .width(Fill),
+                button(
+                    text("Crear")
+                        .size(12)
+                        .align_x(Alignment::Center)
+                        .width(Fill),
+                )
+                .on_press_maybe(if can_create {
+                    Some(Message::BranchCreatePressed)
+                } else {
+                    None
+                })
+                .padding([8, 12])
+                .style(button::primary),
+            ]
+            .spacing(8),
+            rule::horizontal(1),
+            scrollable(list).height(Length::Fixed(240.0)),
+            dialog_button("Cerrar", Message::BranchModalToggled(false), button::text),
+        ]
+        .spacing(12)
+        .max_width(420),
+    )
+    .padding(20)
+    .style(theme::panel);
+
+    Stack::with_children(vec![
+        modal_scrim(Message::BranchModalToggled(false)).into(),
+        center(card).width(Fill).height(Fill).into(),
+    ])
+    .into()
+}
+
+/// Modal de fusión: elige la rama a integrar en la actual.
+fn merge_modal(app: &App) -> Element<'_, Message> {
+    let current = app
+        .repo
+        .as_ref()
+        .map(|open| open.status.branch.clone())
+        .unwrap_or_default();
+
+    let others: Vec<String> = app
+        .branches
+        .iter()
+        .filter(|branch| !branch.is_current)
+        .map(|branch| branch.name.clone())
+        .collect();
+
+    let card = container(
+        column![
+            text(format!("Fusionar en «{current}»")).size(18),
+            text("Elige la rama cuyos cambios quieres integrar.")
+                .size(12)
+                .style(theme::muted),
+            pick_list(
+                others,
+                app.merge_target.clone(),
+                |name: String| Message::MergeTargetPicked(Some(name)),
+            )
+            .width(Fill),
+            row![
+                dialog_button("Cancelar", Message::MergeModalToggled(false), button::text),
+                dialog_button(
+                    "Fusionar",
+                    Message::MergePressed,
+                    button::primary,
+                ),
+            ]
+            .spacing(10),
+        ]
+        .spacing(12)
+        .max_width(380),
+    )
+    .padding(24)
+    .style(theme::panel);
+
+    Stack::with_children(vec![
+        modal_scrim(Message::MergeModalToggled(false)).into(),
+        center(card).width(Fill).height(Fill).into(),
+    ])
+    .into()
+}
+
+/// Modal de clonación: URL + carpeta de destino + progreso.
+fn clone_modal(app: &App) -> Element<'_, Message> {
+    let busy = app.running_op.is_some();
+    let can_clone = !app.clone_url.trim().is_empty() && app.clone_folder.is_some() && !busy;
+
+    let progress = if let Some(progress) = &app.net_progress {
+        match progress.percent {
+            Some(percent) => format!("{} · {percent} %", progress.phase),
+            None => progress.phase.clone(),
+        }
+    } else if busy {
+        "Clonando…".to_owned()
+    } else {
+        match &app.clone_folder {
+            Some(folder) => format!("Destino: {}", folder.display()),
+            None => String::new(),
+        }
+    };
+
+    let card = container(
+        column![
+            text("Clonar repositorio").size(18),
+            text("Pega la URL (HTTPS o SSH) y elige dónde clonarlo.")
+                .size(12)
+                .style(theme::muted),
+            text_input("https://github.com/usuario/repo.git", &app.clone_url)
+                .on_input(Message::CloneUrlChanged)
+                .on_submit(Message::ClonePressed)
+                .size(13),
+            button(
+                text("Elegir carpeta de destino…")
+                    .size(12)
+                    .align_x(Alignment::Center)
+                    .width(Fill),
+            )
+            .on_press_maybe(if busy {
+                None
+            } else {
+                Some(Message::ClonePickFolder)
+            })
+            .padding([8, 0])
+            .width(Fill)
+            .style(button::text),
+            if progress.is_empty() {
+                Element::<Message>::from(column![])
+            } else {
+                text(progress).size(11).style(theme::muted).into()
+            },
+            row![
+                dialog_button("Cancelar", Message::CloneModalToggled(false), button::text),
+                button(
+                    text("Clonar")
+                        .size(13)
+                        .align_x(Alignment::Center)
+                        .width(Fill),
+                )
+                .on_press_maybe(if can_clone {
+                    Some(Message::ClonePressed)
+                } else {
+                    None
+                })
+                .padding([8, 0])
+                .width(Fill)
+                .style(button::primary),
+            ]
+            .spacing(10),
+        ]
+        .spacing(12)
+        .max_width(440),
+    )
+    .padding(24)
+    .style(theme::panel);
+
+    Stack::with_children(vec![
+        modal_scrim(Message::CloneModalToggled(false)).into(),
+        center(card).width(Fill).height(Fill).into(),
+    ])
+    .into()
+}
+
+/// Botón estándar de diálogo (ancho completo, texto centrado).
+fn dialog_button(
+    label: &'static str,
+    message: Message,
+    style: fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style,
+) -> Element<'static, Message> {
+    button(
+        text(label)
+            .size(13)
+            .align_x(Alignment::Center)
+            .width(Fill),
+    )
+    .on_press(message)
+    .padding([8, 0])
+    .width(Fill)
+    .style(style)
+    .into()
+}
+
+// ————————————————————————————— banners ————————————————————————————————
+
+/// Banner de aviso (resultados de merge, etc.).
+fn notice_banner(app: &App) -> Element<'_, Message> {
+    let Some(notice) = &app.notice else {
+        return column![].into();
+    };
+
+    container(
+        row![
+            text(notice.clone()).size(12).style(theme::notice).width(Fill),
+            button(text("X").size(11))
+                .on_press(Message::ClearNotice)
+                .padding([2, 8])
+                .style(button::text),
+        ]
+        .spacing(8)
+        .align_y(Alignment::Center),
+    )
+    .padding([6, 14])
+    .width(Fill)
+    .into()
+}
 
 /// Banner de error descartable (fila de altura cero si no hay error).
 fn error_banner(app: &App) -> Element<'_, Message> {
@@ -399,4 +650,29 @@ fn error_banner(app: &App) -> Element<'_, Message> {
     .padding([6, 14])
     .width(Fill)
     .into()
+}
+
+// ————————————————————————————— utilidades ————————————————————————————————
+
+/// Etiqueta de la rama actual en la cabecera.
+fn branch_label(open: &OpenRepo) -> String {
+    if open.status.head_detached {
+        format!("{} (detached)", open.status.branch)
+    } else if open.status.branch.is_empty() {
+        "(sin commits aún)".to_owned()
+    } else {
+        open.status.branch.clone()
+    }
+}
+
+/// Texto humano para "última sincronización hace X".
+fn ago_text(then: std::time::Instant) -> String {
+    let seconds = then.elapsed().as_secs();
+    if seconds < 45 {
+        "hace unos segundos".to_owned()
+    } else if seconds < 3600 {
+        format!("hace {} min", seconds / 60)
+    } else {
+        format!("hace {} h", seconds / 3600)
+    }
 }

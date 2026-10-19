@@ -65,8 +65,11 @@ pub fn network_op(path: PathBuf, branch: String, kind: NetOpKind) -> Subscriptio
             drop(engine); // libera libgit2 antes de ejecutar el subproceso
 
             // 2) Ejecuta `git --progress` y transmite el progreso de stderr.
-            let mut command =
-                tokio::process::Command::from(cli::build_command(kind, &path, &branch));
+            let mut command = tokio::process::Command::from(cli::build_command(
+                kind.clone(),
+                &path,
+                &branch,
+            ));
             let mut child = match command.spawn() {
                 Ok(child) => child,
                 Err(err) => {

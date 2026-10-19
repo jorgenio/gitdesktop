@@ -121,6 +121,13 @@ pub fn error(_theme: &Theme) -> text::Style {
     }
 }
 
+/// Texto de aviso exitoso (banners de resultado).
+pub fn notice(_theme: &Theme) -> text::Style {
+    text::Style {
+        color: Some(hex(0x3F_B9_50)),
+    }
+}
+
 /// Texto de líneas añadidas.
 pub fn added(_theme: &Theme) -> text::Style {
     text::Style {

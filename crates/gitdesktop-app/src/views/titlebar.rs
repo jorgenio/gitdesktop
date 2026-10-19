@@ -37,8 +37,7 @@ const MENUS: [(&str, &[MenuItem]); 6] = [
         "Archivo",
         &[
             MenuItem::action("Abrir repositorio…", MenuAction::OpenRepository),
-            MenuItem::disabled("Clonar repositorio… (M4)"),
-            MenuItem::disabled("Añadir repositorio local… (próximamente)"),
+            MenuItem::action("Clonar repositorio…", MenuAction::Clone),
             MenuItem::action("Salir", MenuAction::Quit),
         ],
     ),
@@ -69,9 +68,9 @@ const MENUS: [(&str, &[MenuItem]); 6] = [
     (
         "Rama",
         &[
-            MenuItem::disabled("Nueva rama… (M4)"),
-            MenuItem::disabled("Renombrar rama… (M4)"),
-            MenuItem::disabled("Eliminar rama… (M4)"),
+            MenuItem::action("Nueva rama…", MenuAction::NewBranch),
+            MenuItem::action("Fusionar rama en la actual…", MenuAction::MergeBranches),
+            MenuItem::disabled("Renombrar rama… (fase 2)"),
         ],
     ),
     (

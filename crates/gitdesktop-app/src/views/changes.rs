@@ -105,14 +105,57 @@ fn container_row<'a>(
         .into()
 }
 
-/// Panel inferior: resumen + descripción + botón de commit.
+/// Panel inferior: resumen + descripción + botón de commit (o de merge
+/// cuando hay una fusión en curso con conflictos).
 fn commit_panel<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
-    let can_commit = open.status.staged_count() > 0 && !app.summary.trim().is_empty();
+    let merging = open.status.merging;
+    let can_commit = open.status.staged_count() > 0
+        && !app.summary.trim().is_empty()
+        && !merging;
 
     let branch = if open.status.branch.is_empty() {
         "main".to_owned()
     } else {
         open.status.branch.clone()
+    };
+
+    let merge_row: Element<'a, Message> = if merging {
+        row![
+            button(
+                text("Confirmar merge")
+                    .size(12)
+                    .align_x(Alignment::Center)
+                    .width(Fill),
+            )
+            .on_press_maybe(if open.status.staged_count() > 0 {
+                Some(Message::MergeCommitPressed)
+            } else {
+                None
+            })
+            .padding([8, 0])
+            .width(Fill)
+            .style(button::primary),
+            button(
+                text("Abortar")
+                    .size(12)
+                    .align_x(Alignment::Center)
+                    .width(Fill),
+            )
+            .on_press(Message::MergeAborted)
+            .padding([8, 0])
+            .width(Fill)
+            .style(button::danger),
+        ]
+        .spacing(8)
+        .into()
+    } else {
+        column![].into()
+    };
+
+    let commit_button_label = if merging {
+        "Commit normal deshabilitado durante el merge".to_owned()
+    } else {
+        format!("Hacer commit en {branch}")
     };
 
     column![
@@ -124,8 +167,9 @@ fn commit_panel<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
             .on_action(Message::DescriptionEdited)
             .size(12)
             .height(Length::Fixed(84.0)),
+        merge_row,
         button(
-            text(format!("Hacer commit en {branch}"))
+            text(commit_button_label)
                 .size(13)
                 .align_x(Alignment::Center)
                 .width(Fill),

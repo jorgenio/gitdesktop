@@ -60,6 +60,8 @@ pub struct RepoStatus {
     pub has_upstream: bool,
     /// El repositorio tiene al menos un remoto.
     pub has_remote: bool,
+    /// Hay un merge en curso (existe MERGE_HEAD).
+    pub merging: bool,
     pub entries: Vec<FileEntry>,
 }
 
@@ -106,6 +108,21 @@ pub struct CommitSummary {
     pub author: String,
     /// Fecha del commit en UTC (la zona horaria local llega en fase 2).
     pub time: OffsetDateTime,
+}
+
+/// Resultado de una operación de fusión (merge).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MergeOutcome {
+    /// Ya estaba todo integrado, no hizo nada.
+    UpToDate,
+    /// Avance rápido (sin commit de fusión).
+    FastForward,
+    /// Merge realizado con commit de fusión.
+    Merged,
+    /// El merge dejó conflictos: lista de archivos en conflicto.
+    Conflicts(Vec<String>),
+    /// El merge en curso fue abortado.
+    Aborted,
 }
 
 /// Información de una rama (la usará el selector a partir de M4).

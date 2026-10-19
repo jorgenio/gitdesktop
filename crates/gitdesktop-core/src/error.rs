@@ -19,6 +19,9 @@ pub enum GitoError {
     #[error("falta configurar tu identidad: ejecuta `git config --global user.name` y `user.email`")]
     MissingIdentity,
 
+    #[error("{0}")]
+    GitCli(String),
+
     #[error("error de E/S en {path}: {source}")]
     Io {
         path: PathBuf,
