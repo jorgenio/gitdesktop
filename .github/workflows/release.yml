@@ -16,7 +16,7 @@ jobs:
             artifact: git-desktop-jorgenio-linux-x86_64
           - os: windows-latest
             binary: git-desktop-jorgenio.exe
-            artifact: git-desktop-jorgenio-windows-x86_64
+            artifact: git-desktop-jorgenio-windows-x86_64.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -28,11 +28,22 @@ jobs:
       - name: Build release
         run: cargo build --release -p gitdesktop-app
 
-      - name: Subir binario
+      - name: Preparar binario con nombre de plataforma
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/release/${{ matrix.binary }}" "dist/${{ matrix.artifact }}"
+
+      - name: Subir artefacto del workflow
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: target/release/${{ matrix.binary }}
+          path: dist/*
 
-# Nota (M5): aquí irán los instaladores — .deb/AppImage en Linux y MSI en
-# Windows, más la creación automática del release en GitHub.
+      - name: Publicar en el GitHub Release del tag
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
+
+# Nota (M5): instaladores — .deb/AppImage en Linux y MSI en Windows.
