@@ -2,7 +2,8 @@
 <!--
   Instalador MSI de Git-Desktop Jorgenio (schema WiX 3.x, consumido por
   candle/light en CI). Variables definidas por el workflow:
-  - $(var.ExePath)       ruta del ejecutable release
+  - $(var.ExePath)        ruta del ejecutable release
+  - $(var.IconPath)       ruta del icono .ico
   - $(var.ProductVersion) versión del tag (vX.Y.Z -> X.Y.Z)
 -->
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
@@ -42,9 +43,11 @@
       Level='1'
       Absent='disallow'>
       <ComponentRef Id='MainExecutable' />
+      <ComponentRef Id='StartMenuShortcut' />
     </Feature>
 
     <Directory Id='TARGETDIR' Name='SourceDir'>
+      <!-- Ejecutable: datos por-máquina con KeyPath de archivo -->
       <Directory Id='ProgramFiles64Folder'>
         <Directory Id='INSTALLFOLDER' Name='Git-Desktop Jorgenio'>
           <Component Id='MainExecutable' Guid='*'>
@@ -53,17 +56,30 @@
               Name='git-desktop-jorgenio.exe'
               Source='$(var.ExePath)'
               KeyPath='yes' />
-            <Shortcut
-              Id='StartMenuShortcut'
-              Directory='ProgramMenuFolder'
-              Name='Git-Desktop Jorgenio'
-              WorkingDirectory='INSTALLFOLDER'
-              Icon='AppIcon'
-              Advertise='no' />
           </Component>
         </Directory>
       </Directory>
-      <Directory Id='ProgramMenuFolder' />
+
+      <!-- Acceso directo: datos por-usuario con KeyPath HKCU (ICE43/ICE57) -->
+      <Directory Id='ProgramMenuFolder'>
+        <Component Id='StartMenuShortcut' Guid='*'>
+          <Shortcut
+            Id='StartMenuShortcutEntry'
+            Name='Git-Desktop Jorgenio'
+            Description='Cliente Git de escritorio en Rust'
+            Target='[INSTALLFOLDER]git-desktop-jorgenio.exe'
+            WorkingDirectory='INSTALLFOLDER'
+            Icon='AppIcon' />
+          <RemoveFolder Id='RemoveProgramsFolder' On='uninstall' />
+          <RegistryValue
+            Root='HKCU'
+            Key='Software\Jorgenio\GitDesktopJorgenio'
+            Name='shortcut'
+            Type='integer'
+            Value='1'
+            KeyPath='yes' />
+        </Component>
+      </Directory>
     </Directory>
   </Product>
 </Wix>
