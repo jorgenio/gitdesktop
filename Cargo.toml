@@ -10,7 +10,8 @@ license = "MIT"
 
 [workspace.dependencies]
 gitdesktop-core = { path = "crates/gitdesktop-core" }
-iced = { version = "0.14", features = ["tokio"] }
+jorgenio-core = { path = "vendor/text-editor/crates/jorgenio-core" }
+iced = { version = "0.14", features = ["tokio", "canvas"] }
 git2 = { version = "0.21", default-features = false }
 serde = { version = "1", features = ["derive"] }
 toml = "0.9"

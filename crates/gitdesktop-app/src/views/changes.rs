@@ -71,10 +71,19 @@ fn file_row<'a>(app: &'a App, entry: &'a FileEntry) -> Element<'a, Message> {
     .spacing(6)
     .align_y(Alignment::Center);
 
-    // En conflicto: abrir en Jorgenio Text para resolver marcadores.
+    // En conflicto: editor embebido (canvas + jorgenio-core)…
     if entry.status == gitdesktop_core::FileStatus::Conflicted {
         controls = controls.push(
-            button(text("editar").size(10).style(theme::notice))
+            button(text("editar aquí").size(10).style(theme::notice))
+                .on_press(Message::EditConflictPressed {
+                    path: entry.path.clone(),
+                })
+                .padding([3, 6])
+                .style(theme::menu_item),
+        );
+        // …o abrir en Jorgenio Text como ventana propia.
+        controls = controls.push(
+            button(text("jorgenio ↗").size(10).style(theme::muted))
                 .on_press(Message::ResolveInEditor {
                     path: entry.path.clone(),
                 })

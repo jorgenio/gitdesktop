@@ -8,6 +8,7 @@ mod state;
 mod subscriptions;
 mod theme;
 mod views;
+mod widgets;
 
 use state::App;
 

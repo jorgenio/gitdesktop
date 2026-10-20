@@ -125,6 +125,10 @@ pub enum Message {
 
     /// Abre el archivo (en conflicto) en el editor del usuario (jorgenio).
     ResolveInEditor { path: String },
+    /// Abre el editor de conflictos embebido.
+    EditConflictPressed { path: String },
+    /// Acción del editor embebido (teclado/rueda/botones).
+    EditorMsg(crate::widgets::conflict_editor::EditAction),
 
     ClearError,
     ClearNotice,

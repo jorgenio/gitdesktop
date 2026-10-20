@@ -1,0 +1,3 @@
+[submodule "vendor/text-editor"]
+	path = vendor/text-editor
+	url = ../text-editor.git

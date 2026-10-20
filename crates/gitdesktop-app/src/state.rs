@@ -12,6 +12,7 @@ use iced::widget::text_editor;
 use time::OffsetDateTime;
 
 use crate::messages::{BranchOpResult, MenuAction, Message, Op, Tab};
+use crate::widgets::conflict_editor::{ConflictEditor, EditAction, EDITOR_VISIBLE_LINES};
 
 /// Límite de commits cargados en el historial.
 const LOG_LIMIT: usize = 200;
@@ -73,6 +74,9 @@ pub struct App {
     pub clone_modal: bool,
     pub clone_url: String,
     pub clone_folder: Option<PathBuf>,
+
+    // Editor de conflictos embebido (fase 2)
+    pub conflict_editor: Option<ConflictEditor>,
 
     // Cromo personalizado (barra de título + menús)
     pub open_menu: Option<usize>,
@@ -147,6 +151,7 @@ impl App {
                 clone_modal: false,
                 clone_url: String::new(),
                 clone_folder: None,
+                conflict_editor: None,
                 open_menu: None,
                 about: false,
                 maximized: false,
@@ -190,6 +195,10 @@ impl App {
             subs.push(crate::subscriptions::repository_activities(
                 open.entry.path.clone(),
             ));
+        }
+
+        if self.conflict_editor.is_some() {
+            subs.push(self.editor_keys());
         }
 
         if let Some(run) = &self.running_op {
@@ -476,6 +485,23 @@ impl App {
                 }
             },
 
+            Message::EditConflictPressed { path } => {
+                let Some(open) = self.repo.as_ref() else {
+                    return iced::Task::none();
+                };
+                let abs = open.entry.path.join(&path);
+                match ConflictEditor::open(&path, abs) {
+                    Ok(editor) => {
+                        self.notice = Some(format!(
+                            "Edita los marcadores <<<<<<< ======= >>>>>>> y usa                              «Guardar y marcar resuelto»."
+                        ));
+                        self.conflict_editor = Some(editor);
+                    }
+                    Err(err) => self.error = Some(err),
+                }
+                iced::Task::none()
+            }
+            Message::EditorMsg(action) => self.on_editor_msg(action),
             Message::ResolveInEditor { path } => {
                 let Some(open) = self.repo.as_ref() else {
                     return iced::Task::none();
@@ -748,6 +774,7 @@ impl App {
             self.commit_diff = None;
             self.branches.clear();
             self.notice = None;
+            self.conflict_editor = None;
         }
 
         self.data.touch_repo(&path, OffsetDateTime::now_utc());
@@ -871,6 +898,110 @@ impl App {
             Some(path) => branches_task(path),
             None => iced::Task::none(),
         }
+    }
+
+    /// Acciones del editor de conflictos embebido.
+    fn on_editor_msg(&mut self, action: EditAction) -> iced::Task<Message> {
+        // Guardar y cerrar requieren el motor; el resto edita el buffer.
+        match action {
+            EditAction::Save => {
+                let Some(editor) = self.conflict_editor.as_mut() else {
+                    return iced::Task::none();
+                };
+                match editor.save() {
+                    Ok(()) => {
+                        self.notice = Some("Cambios guardados en el archivo.".into());
+                    }
+                    Err(err) => self.error = Some(err),
+                }
+                iced::Task::none()
+            }
+            EditAction::SaveAndResolve => {
+                let Some(editor) = self.conflict_editor.as_mut() else {
+                    return iced::Task::none();
+                };
+                if let Err(err) = editor.save() {
+                    self.error = Some(err);
+                    return iced::Task::none();
+                }
+                let path = editor.path.clone();
+                self.conflict_editor = None;
+                self.loading = true;
+                match self.repo_path() {
+                    Some(repo_path) => op_task(repo_path, Op::Stage, move |engine| {
+                        engine.stage(&path)
+                    }),
+                    None => {
+                        self.loading = false;
+                        iced::Task::none()
+                    }
+                }
+            }
+            EditAction::Close => {
+                self.conflict_editor = None;
+                iced::Task::none()
+            }
+            other => {
+                let dirty = self.conflict_editor.as_mut().map(|editor| {
+                    editor.apply(&other, EDITOR_VISIBLE_LINES)
+                });
+                let _ = dirty;
+                iced::Task::none()
+            }
+        }
+    }
+
+    /// Teclado exclusivo del editor embebido cuando está abierto.
+    fn editor_keys(&self) -> iced::Subscription<Message> {
+        use iced::keyboard::{key, Event, Key};
+
+        iced::keyboard::listen().filter_map(|event| {
+            let (key, modifiers) = match event {
+                Event::KeyPressed { key, modifiers, .. } => (key, modifiers),
+                _ => return None,
+            };
+            let ctrl = modifiers.control() || modifiers.logo();
+            match key {
+                Key::Named(named) => match named {
+                    key::Named::ArrowLeft => Some(Message::EditorMsg(EditAction::Left)),
+                    key::Named::ArrowRight => Some(Message::EditorMsg(EditAction::Right)),
+                    key::Named::ArrowUp => Some(Message::EditorMsg(EditAction::Up)),
+                    key::Named::ArrowDown => Some(Message::EditorMsg(EditAction::Down)),
+                    key::Named::Home => Some(Message::EditorMsg(EditAction::Home)),
+                    key::Named::End => Some(Message::EditorMsg(EditAction::End)),
+                    key::Named::Backspace => Some(Message::EditorMsg(EditAction::Backspace)),
+                    key::Named::Delete => Some(Message::EditorMsg(EditAction::Delete)),
+                    key::Named::PageUp => Some(Message::EditorMsg(EditAction::PageUp)),
+                    key::Named::PageDown => Some(Message::EditorMsg(EditAction::PageDown)),
+                    key::Named::Enter => {
+                        if ctrl {
+                            Some(Message::EditorMsg(EditAction::SaveAndResolve))
+                        } else {
+                            Some(Message::EditorMsg(EditAction::Newline))
+                        }
+                    }
+                    key::Named::Escape => Some(Message::EditorMsg(EditAction::Close)),
+                    _ => None,
+                },
+                Key::Character(text) => {
+                    let text = text.to_lowercase();
+                    if ctrl && text == "z" {
+                        Some(Message::EditorMsg(if modifiers.shift() {
+                            EditAction::Redo
+                        } else {
+                            EditAction::Undo
+                        }))
+                    } else if ctrl && text == "s" {
+                        Some(Message::EditorMsg(EditAction::SaveAndResolve))
+                    } else if ctrl {
+                        None
+                    } else {
+                        Some(Message::EditorMsg(EditAction::Char(text)))
+                    }
+                }
+                _ => None,
+            }
+        })
     }
 
     /// Alterna claro/oscuro y persiste la preferencia.

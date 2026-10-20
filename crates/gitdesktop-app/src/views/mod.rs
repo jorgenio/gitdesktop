@@ -6,10 +6,11 @@ pub mod diff_view;
 pub mod history;
 pub mod titlebar;
 
-use iced::widget::{button, center, column, container, mouse_area, pick_list, row, rule, scrollable, space, text, text_input, Stack};
+use iced::widget::{button, canvas, center, column, container, mouse_area, pick_list, row, rule, scrollable, space, text, text_input, Stack};
 use iced::{Alignment, Element, Fill, Length};
 
 use crate::messages::{Message, Tab};
+use crate::widgets::conflict_editor::{EditAction, EditorCanvas};
 use crate::state::{App, OpenRepo};
 use crate::theme;
 
@@ -256,6 +257,9 @@ fn welcome(app: &App) -> Element<'_, Message> {
 
 /// Todos los modales, por prioridad.
 fn modals(app: &App) -> Element<'_, Message> {
+    if app.conflict_editor.is_some() {
+        return editor_modal(app);
+    }
     if app.about {
         return about_modal();
     }
@@ -606,7 +610,80 @@ fn dialog_button(
     .into()
 }
 
-// ————————————————————————————— banners ————————————————————————————————
+/// Editor de conflictos embebido (canvas + jorgenio-core).
+fn editor_modal(app: &App) -> Element<'_, Message> {
+    let Some(editor) = &app.conflict_editor else {
+        return column![].into();
+    };
+
+    // Sin clic-fuera para cerrar: evita perder ediciones por accidente.
+    let scrim = container(space::Space::new().width(Fill).height(Fill))
+        .width(Fill)
+        .height(Fill)
+        .style(theme::scrim);
+
+    let caret_line = editor.buffer.char_to_line(editor.caret.min(editor.buffer.len_chars()));
+    let status = format!(
+        "Línea {} · columna {} · {}{}",
+        caret_line + 1,
+        editor.caret_col(),
+        if editor.buffer.dirty() {
+            "SIN GUARDAR"
+        } else {
+            "guardado"
+        },
+        editor.path,
+    );
+
+    let card = container(
+        column![
+            row![
+                text("Resolver conflicto").size(17).width(Fill),
+                text(editor.path.clone()).size(11).style(theme::muted),
+            ]
+            .spacing(4)
+            .align_y(Alignment::Center),
+            container(
+                canvas::Canvas::new(EditorCanvas::new(editor))
+                    .width(Fill)
+                    .height(Length::Fixed(400.0)),
+            )
+            .width(Fill)
+            .style(theme::sidebar),
+            text(status).size(11).style(theme::muted),
+            row![
+                dialog_button(
+                    "Cancelar (Esc)",
+                    Message::EditorMsg(EditAction::Close),
+                    button::text,
+                ),
+                dialog_button(
+                    "Guardar",
+                    Message::EditorMsg(EditAction::Save),
+                    button::text,
+                ),
+                dialog_button(
+                    "Guardar y marcar resuelto (Ctrl+S)",
+                    Message::EditorMsg(EditAction::SaveAndResolve),
+                    button::primary,
+                ),
+            ]
+            .spacing(8),
+        ]
+        .spacing(10)
+        .max_width(980),
+    )
+    .padding(16)
+    .style(theme::panel);
+
+    Stack::with_children(vec![
+        scrim.into(),
+        center(card).width(Fill).height(Fill).into(),
+    ])
+    .into()
+}
+
+// ————————————————————————————— banners ———————————————————————————————— 
 
 /// Banner de aviso (resultados de merge, etc.).
 fn notice_banner(app: &App) -> Element<'_, Message> {

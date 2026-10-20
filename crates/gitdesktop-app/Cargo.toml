@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 gitdesktop-core = { workspace = true }
+jorgenio-core = { workspace = true }
 iced = { workspace = true }
 rfd = { workspace = true }
 time = { workspace = true }
