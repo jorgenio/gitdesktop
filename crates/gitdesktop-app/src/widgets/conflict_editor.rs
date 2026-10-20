@@ -407,7 +407,7 @@ impl canvas::Program<Message> for EditorCanvas<'_> {
         frame.fill_rectangle(
             Point::new(0.0, 0.0),
             Size::new(bounds.width, 1.0),
-            c.border,
+            c.separator,
         );
 
         vec![frame.into_geometry()]

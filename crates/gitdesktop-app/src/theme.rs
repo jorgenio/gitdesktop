@@ -1,71 +1,85 @@
-//! Temas claro/oscuro estilo GitHub + estilos reutilizables (PLAN.md §6).
+//! Sistema de diseño de Git-Desktop Jorgenio — flat, sin bordes.
 //!
-//! Todas las funciones de estilo reciben `&Theme` y toman sus colores de
-//! [`colors`], que despacha entre las paletas dark/light según el nombre
-//! del tema. El tema activo se persiste en `UiState.theme`.
+//! Separación por fondos sutiles + hairlines; sombras solo para elementos
+//! flotantes (menús, modales). Los botones reaccionan al hover (Status).
 
 use iced::widget::{button, container, text};
-use iced::{Background, Border, Color, Theme};
+use iced::{Background, Border, Color, Shadow, Theme};
 use iced::theme::{Base, Palette};
 
 use gitdesktop_core::DiffLineKind;
 
-/// Paleta completa de la app (más rica que `iced::theme::Palette`).
+/// Paleta completa de la app.
 #[derive(Debug, Clone, Copy)]
 pub struct GitoColors {
     pub canvas: Color,     // fondo general
-    pub panel: Color,      // paneles y tarjetas
-    pub panel_soft: Color, // filas / hover / selección
-    pub border: Color,
+    pub header: Color,     // barra superior (ligeramente distinta)
+    pub panel: Color,      // sidebar / listas
+    pub panel_soft: Color, // hover
+    pub selected: Color,   // fila seleccionada
+    pub separator: Color,  // hairlines
     pub text: Color,
     pub muted: Color,
-    pub accent: Color, // azul GitHub
+    pub accent: Color,
     pub success: Color,
     pub danger: Color,
     pub warning: Color,
-    pub add_bg: Color,    // fondo de líneas añadidas
-    pub del_bg: Color,    // fondo de líneas eliminadas
-    pub hunk_bg: Color,   // fondo de cabeceras de hunk
-    pub add_text: Color,  // texto de líneas añadidas
-    pub del_text: Color,  // texto de líneas eliminadas
+    pub add_bg: Color,
+    pub add_gutter: Color, // columna de números en líneas añadidas
+    pub del_bg: Color,
+    pub del_gutter: Color, // columna de números en líneas eliminadas
+    pub hunk_bg: Color,
+    pub add_text: Color,
+    pub del_text: Color,
+    pub shadow: Color,
 }
 
 /// GitHub Dark.
 pub const DARK: GitoColors = GitoColors {
     canvas: hex(0x0D_11_17),
+    header: hex(0x01_04_09),
     panel: hex(0x16_1B_22),
-    panel_soft: hex(0x1C_21_28),
-    border: hex(0x30_36_3D),
+    panel_soft: hex(0x21_26_2D),
+    selected: hex(0x2D_33_3B),
+    separator: hex(0x21_26_2D),
     text: hex(0xE6_ED_F3),
-    muted: hex(0x8B_94_9E),
+    muted: hex(0x7D_85_90),
     accent: hex(0x2F_81_F7),
-    success: hex(0x23_86_36),
-    danger: hex(0xDA_36_33),
+    success: hex(0x3F_B9_50),
+    danger: hex(0xF8_51_49),
     warning: hex(0xD2_99_22),
-    add_bg: hex(0x0E_44_29),
-    del_bg: hex(0x43_1E_22),
+    add_bg: hex(0x12_2B_1E),
+    add_gutter: hex(0x0C_20_16),
+    del_bg: hex(0x3C_1D_20),
+    del_gutter: hex(0x2E_16_19),
     hunk_bg: hex(0x1B_2B_4A),
     add_text: hex(0x7E_E7_87),
     del_text: hex(0xFF_7B_72),
+    shadow: Color { a: 0.5, ..Color::BLACK },
 };
 
 /// GitHub Light.
 pub const LIGHT: GitoColors = GitoColors {
     canvas: hex(0xFF_FF_FF),
+    header: hex(0xF6_F8_FA),
     panel: hex(0xF6_F8_FA),
-    panel_soft: hex(0xEA_EF_F2),
-    border: hex(0xD0_D7_DE),
+    panel_soft: hex(0xEA_ED_F0),
+    selected: hex(0xDD_E4_EA),
+    separator: hex(0xE7_EC_F0),
     text: hex(0x1F_23_28),
-    muted: hex(0x65_6D_76),
+    muted: hex(0x59_63_6E),
     accent: hex(0x09_69_DA),
     success: hex(0x1A_7F_37),
     danger: hex(0xCF_22_2E),
     warning: hex(0x9A_67_00),
-    add_bg: hex(0xDA_FB_E1),
+    add_bg: hex(0xE6_FF_EC),
+    add_gutter: hex(0xCC_FF_D8),
     del_bg: hex(0xFF_EB_E9),
+    del_gutter: hex(0xFF_D7_D5),
     hunk_bg: hex(0xDD_F4_FF),
     add_text: hex(0x1A_7F_37),
     del_text: hex(0xCF_22_2E),
+    shadow: Color { a: 0.12, ..Color::BLACK },
 };
 
 const fn hex(value: u32) -> Color {
@@ -86,8 +100,7 @@ pub fn colors(theme: &Theme) -> &'static GitoColors {
     }
 }
 
-/// Tema base de Git-Desktop Jorgenio a partir del valor persistido
-/// (`UiState.theme`: "dark" | "light").
+/// Tema base de la app a partir del valor persistido.
 pub fn current(theme_name: &str) -> Theme {
     let palette = match theme_name {
         "light" => Palette {
@@ -116,15 +129,35 @@ pub fn current(theme_name: &str) -> Theme {
     Theme::custom(name, palette)
 }
 
-// ——————————————————————————— Contenedores ————————————————————————————
+/// Campo de texto con borde redondeado (única excepción con borde, como
+/// el box «Description» de GitHub Desktop). Focused → borde del acento.
+pub fn input(theme: &Theme, status: iced::widget::text_input::Status) -> iced::widget::text_input::Style {
+    let c = colors(theme);
+    let border_color = match status {
+        iced::widget::text_input::Status::Focused { .. } => c.accent,
+        _ => c.separator,
+    };
+    iced::widget::text_input::Style {
+        background: Background::Color(c.canvas),
+        border: Border {
+            color: border_color,
+            width: 1.0,
+            radius: 6.0.into(),
+        },
+        icon: c.muted,
+        value: c.text,
+        placeholder: c.muted,
+        selection: c.accent,
+    }
+}
 
-/// Panel con borde redondeado (cabecera, tarjetas).
-pub fn panel(theme: &Theme) -> container::Style {
+/// Caja que envuelve editores multilínea (mismo look que input).
+pub fn input_box(theme: &Theme) -> container::Style {
     let c = colors(theme);
     container::Style {
-        background: Some(c.panel.into()),
+        background: Some(c.canvas.into()),
         border: Border {
-            color: c.border,
+            color: c.separator,
             width: 1.0,
             radius: 6.0.into(),
         },
@@ -132,20 +165,43 @@ pub fn panel(theme: &Theme) -> container::Style {
     }
 }
 
-/// Columna lateral sin borde.
-pub fn sidebar(theme: &Theme) -> container::Style {
+// ——————————————————————————— Contenedores ————————————————————————————
+
+/// Barra de cabecera: fondo propio, sin bordes.
+pub fn header_bar(theme: &Theme) -> container::Style {
+    container::Style {
+        background: Some(colors(theme).header.into()),
+        ..container::Style::default()
+    }
+}
+
+/// Panel genérico (sidebar, listas): fondo plano, sin bordes.
+pub fn panel(theme: &Theme) -> container::Style {
     container::Style {
         background: Some(colors(theme).panel.into()),
         ..container::Style::default()
     }
 }
 
-/// Fila de la lista de archivos; resalta la seleccionada.
+/// Alias de panel (columna lateral).
+pub fn sidebar(theme: &Theme) -> container::Style {
+    panel(theme)
+}
+
+/// Hairline vertical u horizontal (separadores de 1px).
+pub fn separator(theme: &Theme) -> container::Style {
+    container::Style {
+        background: Some(colors(theme).separator.into()),
+        ..container::Style::default()
+    }
+}
+
+/// Fila de archivo: base; la selección la resalta el hover del botón.
 pub fn file_row(selected: bool) -> impl Fn(&Theme) -> container::Style {
     move |theme: &Theme| {
         let c = colors(theme);
         container::Style {
-            background: Some(if selected { c.panel_soft } else { c.panel }.into()),
+            background: Some(if selected { c.selected } else { c.panel }.into()),
             ..container::Style::default()
         }
     }
@@ -168,49 +224,74 @@ pub fn diff_row(kind: DiffLineKind) -> impl Fn(&Theme) -> container::Style {
     }
 }
 
-/// Velo oscuro detrás de menús y modales (se adapta al tema).
+/// Velo detrás de menús y modales (se adapta al tema).
 pub fn scrim(theme: &Theme) -> container::Style {
     let c = colors(theme);
     container::Style {
         background: Some(Background::Color(Color {
-            a: if c.text.r > 0.5 { 0.35 } else { 0.55 },
+            a: if c.text.r > 0.5 { 0.25 } else { 0.45 },
             ..Color::BLACK
         })),
         ..container::Style::default()
     }
 }
 
+/// Tarjeta flotante (modales): sombra suave, SIN borde.
+pub fn card(theme: &Theme) -> container::Style {
+    let c = colors(theme);
+    container::Style {
+        background: Some(c.panel.into()),
+        border: Border::default().rounded(8),
+        shadow: Shadow {
+            color: c.shadow,
+            offset: iced::Vector::new(0.0, 6.0),
+            blur_radius: 18.0,
+        },
+        ..container::Style::default()
+    }
+}
+
+/// Panel del menú desplegable (flotante, sombra).
+pub fn dropdown(theme: &Theme) -> container::Style {
+    let c = colors(theme);
+    container::Style {
+        background: Some(c.panel.into()),
+        border: Border::default().rounded(8),
+        shadow: Shadow {
+            color: c.shadow,
+            offset: iced::Vector::new(0.0, 8.0),
+            blur_radius: 20.0,
+        },
+        ..container::Style::default()
+    }
+}
+
 // —————————————————————————————— Textos ————————————————————————————————
 
-/// Texto atenuado (secundario).
 pub fn muted(theme: &Theme) -> text::Style {
     text::Style {
         color: Some(colors(theme).muted),
     }
 }
 
-/// Texto de error.
 pub fn error(theme: &Theme) -> text::Style {
     text::Style {
         color: Some(colors(theme).danger),
     }
 }
 
-/// Texto de aviso exitoso (banners de resultado).
 pub fn notice(theme: &Theme) -> text::Style {
     text::Style {
         color: Some(colors(theme).success),
     }
 }
 
-/// Texto de líneas añadidas.
 pub fn added(theme: &Theme) -> text::Style {
     text::Style {
         color: Some(colors(theme).add_text),
     }
 }
 
-/// Texto de líneas eliminadas.
 pub fn deleted(theme: &Theme) -> text::Style {
     text::Style {
         color: Some(colors(theme).del_text),
@@ -219,60 +300,90 @@ pub fn deleted(theme: &Theme) -> text::Style {
 
 // —————————————————————————————— Botones ————————————————————————————————
 
-/// Botón de la barra de menús (Archivo, Editar…).
+/// Botón de la barra de menús (Archivo, Editar…): hover sutil.
 pub fn menu_button(open: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
-    move |theme: &Theme, _status: button::Status| {
+    move |theme: &Theme, status: button::Status| {
         let c = colors(theme);
+        let background = match status {
+            button::Status::Active if open => c.panel_soft,
+            button::Status::Hovered | button::Status::Pressed => c.panel_soft,
+            _ => c.header,
+        };
         button::Style {
-            background: Some(if open { c.panel_soft.into() } else { Color::TRANSPARENT.into() }),
+            background: Some(background.into()),
             text_color: c.text,
-            border: Border::default().rounded(4),
+            border: Border::default().rounded(6),
             ..button::Style::default()
         }
     }
 }
 
-/// Botón fantasma (área de arrastre del título): sin nada visible.
-pub fn ghost(theme: &Theme, _status: button::Status) -> button::Style {
+/// Botón fantasma (filas, título arrastrable): hover sutil.
+pub fn ghost(theme: &Theme, status: button::Status) -> button::Style {
+    let c = colors(theme);
+    let background = match status {
+        button::Status::Hovered | button::Status::Pressed => c.panel_soft,
+        _ => Color::TRANSPARENT,
+    };
+    button::Style {
+        background: Some(background.into()),
+        text_color: c.muted,
+        border: Border::default().rounded(6),
+        ..button::Style::default()
+    }
+}
+
+/// Botones de control de ventana (min/max/cerrar): hover con color.
+pub fn window_button(danger: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |theme: &Theme, status: button::Status| {
+        let c = colors(theme);
+        let background = match status {
+            button::Status::Hovered | button::Status::Pressed => {
+                if danger {
+                    c.danger
+                } else {
+                    c.panel_soft
+                }
+            }
+            _ => Color::TRANSPARENT,
+        };
+        let text_color = if danger && status == button::Status::Hovered {
+            Color::WHITE
+        } else if danger {
+            c.danger
+        } else {
+            c.muted
+        };
+        button::Style {
+            background: Some(background.into()),
+            text_color,
+            border: Border::default().rounded(0),
+            ..button::Style::default()
+        }
+    }
+}
+
+/// Ítem activo de menú desplegable: hover sutil.
+pub fn menu_item(theme: &Theme, status: button::Status) -> button::Style {
+    let c = colors(theme);
+    let background = match status {
+        button::Status::Hovered | button::Status::Pressed => c.panel_soft,
+        _ => Color::TRANSPARENT,
+    };
+    button::Style {
+        background: Some(background.into()),
+        text_color: c.text,
+        border: Border::default().rounded(6),
+        ..button::Style::default()
+    }
+}
+
+/// Ítem deshabilitado de menú desplegable.
+pub fn menu_item_disabled(theme: &Theme, _status: button::Status) -> button::Style {
     button::Style {
         background: Some(Color::TRANSPARENT.into()),
         text_color: colors(theme).muted,
-        border: Border::default().rounded(0),
-        ..button::Style::default()
-    }
-}
-
-/// Botones de control de ventana (minimizar, maximizar, cerrar).
-pub fn window_button(danger: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
-    move |theme: &Theme, _status: button::Status| {
-        let c = colors(theme);
-        button::Style {
-            background: Some(Color::TRANSPARENT.into()),
-            text_color: if danger { c.danger } else { c.muted },
-            border: Border::default().rounded(4),
-            ..button::Style::default()
-        }
-    }
-}
-
-/// Ítem activo de un menú desplegable.
-pub fn menu_item(theme: &Theme, _status: button::Status) -> button::Style {
-    let c = colors(theme);
-    button::Style {
-        background: Some(Color::TRANSPARENT.into()),
-        text_color: c.text,
-        border: Border::default().rounded(4),
-        ..button::Style::default()
-    }
-}
-
-/// Ítem deshabilitado de un menú desplegable.
-pub fn menu_item_disabled(theme: &Theme, _status: button::Status) -> button::Style {
-    let c = colors(theme);
-    button::Style {
-        background: Some(Color::TRANSPARENT.into()),
-        text_color: c.muted,
-        border: Border::default().rounded(4),
+        border: Border::default().rounded(6),
         ..button::Style::default()
     }
 }

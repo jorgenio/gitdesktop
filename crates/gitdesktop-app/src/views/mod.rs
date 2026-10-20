@@ -8,7 +8,7 @@ pub mod prs;
 pub mod titlebar;
 
 use iced::widget::{button, canvas, center, column, container, mouse_area, pick_list, row, rule, scrollable, space, text, text_input, Stack};
-use iced::{Alignment, Element, Fill, Length};
+use iced::{Alignment, Color, Element, Fill, Length, Theme};
 
 use crate::messages::{Message, Tab};
 use crate::widgets::conflict_editor::{EditAction, EditorCanvas};
@@ -62,30 +62,56 @@ fn repository<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
 /// Cabecera: repositorio actual · rama · sincronización contextual
 /// (Fetch / Pull / Push / Publicar, como GitHub Desktop).
 fn header<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
+    let section = |content: Element<'a, Message>| -> Element<'a, Message> {
+        container(content)
+            .padding([8, 16])
+            .height(Length::Fill)
+            .align_y(Alignment::Center)
+            .into()
+    };
+
     container(
         row![
-            column![
-                text("Repositorio actual").size(10).style(theme::muted),
-                text(open.entry.name.clone()).size(15),
-            ]
-            .spacing(2),
-            button(text("Abrir…").size(12))
-                .on_press(Message::OpenFolderDialog)
-                .padding([6, 10])
-                .style(button::text),
+            section(
+                column![
+                    text("Repositorio actual").size(10).style(theme::muted),
+                    text(open.entry.name.clone()).size(15),
+                ]
+                .spacing(2)
+                .into(),
+            ),
+            vertical_separator(),
+            section(
+                column![
+                    text("Abrir otro repositorio…").size(10).style(theme::muted),
+                    button(text("Abrir…").size(13))
+                        .on_press(Message::OpenFolderDialog)
+                        .padding([0, 0])
+                        .style(theme::ghost),
+                ]
+                .spacing(2)
+                .into(),
+            ),
+            vertical_separator(),
+            section(branch_button(open)),
             space::horizontal(),
-            branch_button(open),
-            space::horizontal(),
-            sync_button(app, open),
+            section(sync_button(app, open)),
         ]
-        .spacing(14)
+        .height(Length::Fixed(56.0))
         .align_y(Alignment::Center)
         .width(Fill),
     )
-    .padding([10, 14])
-    .style(theme::panel)
     .width(Fill)
+    .style(theme::header_bar)
     .into()
+}
+
+/// Hairline vertical entre secciones de la cabecera.
+fn vertical_separator() -> Element<'static, Message> {
+    container(space::Space::new().width(1).height(Length::Fill))
+        .height(Length::Fill)
+        .style(theme::separator)
+        .into()
 }
 
 /// Botón contextual de sincronización con progreso e indicador de hora.
@@ -154,19 +180,23 @@ fn branch_button(open: &OpenRepo) -> Element<'static, Message> {
         .spacing(2),
     )
     .on_press(Message::BranchModalToggled(true))
-    .padding([6, 10])
-    .style(button::text)
+    .padding([0, 0])
+    .style(theme::ghost)
     .into()
 }
 
 /// Panel lateral: pestañas Cambios/Historial + contenido.
 fn sidebar<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
-    let tabs = row![
-        tab_button(app.tab, Tab::Changes, format!("Cambios ({})", open.status.entries.len())),
-        tab_button(app.tab, Tab::History, "Historial".to_owned()),
-        tab_button(app.tab, Tab::PullRequests, "PRs".to_owned()),
-    ]
-    .width(Fill);
+    let tabs = container(
+        row![
+            tab_button(app.tab, Tab::Changes, format!("Cambios ({})", open.status.entries.len())),
+            tab_button(app.tab, Tab::History, "Historial".to_owned()),
+            tab_button(app.tab, Tab::PullRequests, "PRs".to_owned()),
+        ]
+        .width(Fill),
+    )
+    .width(Fill)
+    .style(theme::header_bar);
 
     let content = match app.tab {
         Tab::Changes => changes::view(app, open),
@@ -177,9 +207,9 @@ fn sidebar<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
     container(
         column![
             tabs,
-            rule::horizontal(1),
+            hairline(),
             content,
-            rule::horizontal(1),
+            hairline(),
             stash_section(app),
         ]
         .width(Fill)
@@ -189,6 +219,14 @@ fn sidebar<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
     .width(Length::Fixed(380.0))
     .height(Fill)
     .into()
+}
+
+/// Hairline horizontal (1px).
+fn hairline() -> Element<'static, Message> {
+    container(space::Space::new().width(Fill).height(1))
+        .width(Fill)
+        .style(theme::separator)
+        .into()
 }
 
 /// Sección «Stashes» (como GitHub Desktop): crear/listar/aplicar/pop/drop.
@@ -259,20 +297,33 @@ fn stash_section<'a>(app: &'a App) -> Element<'a, Message> {
 }
 
 fn tab_button(active: Tab, this: Tab, label: String) -> Element<'static, Message> {
+    let is_active = active == this;
+
     button(
-        text(label)
-            .size(13)
-            .align_x(Alignment::Center)
-            .width(Fill),
+        column![
+            text(label)
+                .size(13)
+                .align_x(Alignment::Center)
+                .width(Fill),
+            // Subrayado del tab activo (como GitHub Desktop).
+            container(space::Space::new().width(Fill).height(Length::Fixed(3.0)))
+                .width(Fill)
+                .style(move |theme: &Theme| container::Style {
+                    background: Some(if is_active {
+                        theme::colors(theme).accent.into()
+                    } else {
+                        Color::TRANSPARENT.into()
+                    }),
+                    ..container::Style::default()
+                }),
+        ]
+        .spacing(6)
+        .width(Fill),
     )
     .on_press(Message::TabSelected(this))
     .padding([9, 12])
     .width(Fill)
-    .style(if active == this {
-        button::primary
-    } else {
-        button::text
-    })
+    .style(theme::menu_button(false))
     .into()
 }
 
@@ -411,7 +462,7 @@ fn about_modal() -> Element<'static, Message> {
         .max_width(340),
     )
     .padding(24)
-    .style(theme::panel);
+    .style(theme::card);
 
     Stack::with_children(vec![
         modal_scrim(Message::AboutToggled(false)).into(),
@@ -441,7 +492,7 @@ fn discard_modal(path: &str) -> Element<'static, Message> {
         .max_width(380),
     )
     .padding(24)
-    .style(theme::panel);
+    .style(theme::card);
 
     Stack::with_children(vec![
         modal_scrim(Message::CancelDiscard).into(),
@@ -470,7 +521,7 @@ fn delete_branch_modal(branch: &str) -> Element<'static, Message> {
         .max_width(380),
     )
     .padding(24)
-    .style(theme::panel);
+    .style(theme::card);
 
     Stack::with_children(vec![
         modal_scrim(Message::BranchCancelDelete).into(),
@@ -499,7 +550,7 @@ fn drop_stash_modal(reference: &str) -> Element<'static, Message> {
         .max_width(380),
     )
     .padding(24)
-    .style(theme::panel);
+    .style(theme::card);
 
     Stack::with_children(vec![
         modal_scrim(Message::StashCancelDrop).into(),
@@ -551,7 +602,8 @@ fn branch_modal(app: &App) -> Element<'_, Message> {
                     .on_input(Message::NewBranchNameChanged)
                     .on_submit(Message::BranchCreatePressed)
                     .size(13)
-                    .width(Fill),
+                    .width(Fill)
+                    .style(theme::input),
                 button(
                     text("Crear")
                         .size(12)
@@ -575,7 +627,7 @@ fn branch_modal(app: &App) -> Element<'_, Message> {
         .max_width(420),
     )
     .padding(20)
-    .style(theme::panel);
+    .style(theme::card);
 
     Stack::with_children(vec![
         modal_scrim(Message::BranchModalToggled(false)).into(),
@@ -634,7 +686,7 @@ fn merge_modal(app: &App) -> Element<'_, Message> {
         .max_width(380),
     )
     .padding(24)
-    .style(theme::panel);
+    .style(theme::card);
 
     Stack::with_children(vec![
         modal_scrim(Message::MergeModalToggled(false)).into(),
@@ -671,7 +723,7 @@ fn rebase_paused_modal(_app: &App) -> Element<'_, Message> {
         .max_width(420),
     )
     .padding(24)
-    .style(theme::panel);
+    .style(theme::card);
 
     Stack::with_children(vec![center(card).width(Fill).height(Fill).into()]).into()
 }
@@ -704,7 +756,8 @@ fn clone_modal(app: &App) -> Element<'_, Message> {
             text_input("https://github.com/usuario/repo.git", &app.clone_url)
                 .on_input(Message::CloneUrlChanged)
                 .on_submit(Message::ClonePressed)
-                .size(13),
+                .size(13)
+                .style(theme::input),
             button(
                 text("Elegir carpeta de destino…")
                     .size(12)
@@ -747,7 +800,7 @@ fn clone_modal(app: &App) -> Element<'_, Message> {
         .max_width(440),
     )
     .padding(24)
-    .style(theme::panel);
+    .style(theme::card);
 
     Stack::with_children(vec![
         modal_scrim(Message::CloneModalToggled(false)).into(),

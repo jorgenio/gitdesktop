@@ -217,7 +217,7 @@ pub fn menu_overlay(app: &App) -> Element<'_, Message> {
         .align_y(Alignment::Start)
         .width(Fill)
         .height(Fill)
-        .style(theme::sidebar);
+        .style(theme::dropdown);
 
     Stack::with_children(vec![scrim.into(), dropdown.into()]).into()
 }

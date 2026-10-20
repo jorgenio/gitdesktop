@@ -2,7 +2,7 @@
 //! + panel de commit con resumen y descripción.
 
 use iced::alignment;
-use iced::widget::{button, center, checkbox, column, row, scrollable, text, text_editor, text_input};
+use iced::widget::{button, center, checkbox, column, container, row, scrollable, text, text_editor, text_input};
 use iced::{Alignment, Element, Fill, Length};
 
 use gitdesktop_core::FileEntry;
@@ -208,11 +208,17 @@ fn commit_panel<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
         text_input("Resumen (obligatorio)", &app.summary)
             .on_input(Message::SummaryChanged)
             .size(13)
-            .padding([8, 10]),
-        text_editor(&app.description)
-            .on_action(Message::DescriptionEdited)
-            .size(12)
-            .height(Length::Fixed(84.0)),
+            .padding([8, 10])
+            .style(theme::input),
+        container(
+            text_editor(&app.description)
+                .on_action(Message::DescriptionEdited)
+                .size(12)
+                .height(Length::Fixed(84.0)),
+        )
+        .width(Fill)
+        .padding([4, 4])
+        .style(theme::input_box),
         merge_row,
         row![
             button(

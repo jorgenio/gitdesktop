@@ -1,7 +1,7 @@
 //! Visor de diff unificado: números de línea, signo y color por tipo.
 
 use iced::widget::{button, center, column, container, row, scrollable, text};
-use iced::{alignment, Color, Element, Fill, Font, Length};
+use iced::{alignment, Color, Element, Fill, Font, Length, Theme};
 
 use gitdesktop_core::{DiffLine, DiffLineKind};
 
@@ -78,10 +78,26 @@ fn line_row(line: &DiffLine) -> Element<'_, Message> {
         _ => theme::muted,
     };
 
+    // Dos tonos como GitHub Desktop: columna de números con fondo
+    // «gutter» distinto + contenido con el fondo del tipo de línea.
     container(
         row![
-            number(line.old_no),
-            number(line.new_no),
+            container(row![number(line.old_no), number(line.new_no)].width(Fill))
+                .width(Length::Fixed(92.0))
+                .height(Length::Fill)
+                .style(move |theme: &Theme| {
+                    let c = theme::colors(theme);
+                    let background = match line.kind {
+                        gitdesktop_core::DiffLineKind::Added => c.add_gutter,
+                        gitdesktop_core::DiffLineKind::Deleted => c.del_gutter,
+                        gitdesktop_core::DiffLineKind::HunkHeader => c.hunk_bg,
+                        gitdesktop_core::DiffLineKind::Context => c.panel,
+                    };
+                    container::Style {
+                        background: Some(background.into()),
+                        ..container::Style::default()
+                    }
+                }),
             text(sign)
                 .size(12)
                 .font(Font::MONOSPACE)
@@ -92,9 +108,11 @@ fn line_row(line: &DiffLine) -> Element<'_, Message> {
                 .font(Font::MONOSPACE)
                 .width(Fill),
         ]
+        .height(Length::Fixed(20.0))
         .width(Fill),
     )
     .width(Fill)
+    .height(Length::Fixed(20.0))
     .style(theme::diff_row(line.kind))
     .into()
 }

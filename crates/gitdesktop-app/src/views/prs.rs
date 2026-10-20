@@ -233,11 +233,17 @@ pub fn create_modal(app: &App) -> Element<'_, Message> {
             text_input("Título del PR", &app.pr_title)
                 .on_input(Message::PrTitleChanged)
                 .size(13)
-                .padding([8, 10]),
-            text_editor(&app.pr_body)
-                .on_action(Message::PrBodyEdited)
-                .size(12)
-                .height(Length::Fixed(120.0)),
+                .padding([8, 10])
+                .style(theme::input),
+            container(
+                text_editor(&app.pr_body)
+                    .on_action(Message::PrBodyEdited)
+                    .size(12)
+                    .height(Length::Fixed(120.0)),
+            )
+            .width(Fill)
+            .padding([4, 4])
+            .style(theme::input_box),
             row![
                 dialog_button(
                     "Cancelar",
