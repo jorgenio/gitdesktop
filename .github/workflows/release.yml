@@ -16,8 +16,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
-        with:
           # jorgenio-core vive en vendor/text-editor (submódulo)
           submodules: recursive
 
