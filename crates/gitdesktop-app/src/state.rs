@@ -83,6 +83,14 @@ pub struct App {
     // Editor de conflictos embebido (fase 2)
     pub conflict_editor: Option<ConflictEditor>,
 
+    // GitHub / PRs (M7)
+    pub prs: Vec<crate::github::PullRequest>,
+    pub prs_loaded: bool,
+    pub selected_pr: Option<i64>,
+    pub pr_modal: bool,
+    pub pr_title: String,
+    pub pr_body: iced::widget::text_editor::Content,
+
     // Stash / revert / cherry-pick / blame (M6)
     pub stashes: Vec<StashEntry>,
     pub stashes_visible: bool,
@@ -165,6 +173,12 @@ impl App {
                 clone_url: String::new(),
                 clone_folder: None,
                 conflict_editor: None,
+                prs: Vec::new(),
+                prs_loaded: false,
+                selected_pr: None,
+                pr_modal: false,
+                pr_title: String::new(),
+                pr_body: iced::widget::text_editor::Content::new(),
                 stashes: Vec::new(),
                 stashes_visible: false,
                 pending_drop_stash: None,
@@ -354,14 +368,21 @@ impl App {
                     open.entry.last_tab = Some(match tab {
                         Tab::Changes => "changes",
                         Tab::History => "history",
+                        Tab::PullRequests => "pull-requests",
                     }
                     .to_owned());
                 }
                 self.persist();
-                if tab == Tab::History {
-                    self.ensure_log()
-                } else {
-                    iced::Task::none()
+                match tab {
+                    Tab::History => self.ensure_log(),
+                    Tab::PullRequests => {
+                        if !self.prs_loaded {
+                            self.load_prs()
+                        } else {
+                            iced::Task::none()
+                        }
+                    }
+                    Tab::Changes => iced::Task::none(),
                 }
             }
 
@@ -767,6 +788,117 @@ impl App {
                 self.blame = None;
                 iced::Task::none()
             }
+
+            // ——— GitHub: PRs ———
+            Message::PrsLoaded(result) => match result {
+                Ok(prs) => {
+                    self.prs = prs;
+                    self.prs_loaded = true;
+                    if let Some(selected) = self.selected_pr {
+                        if !self.prs.iter().any(|pr| pr.number == selected) {
+                            self.selected_pr = None;
+                        }
+                    }
+                    iced::Task::none()
+                }
+                Err(err) => {
+                    self.prs_loaded = true;
+                    self.error = Some(err);
+                    iced::Task::none()
+                }
+            },
+            Message::PrSelected(number) => {
+                self.selected_pr = number;
+                iced::Task::none()
+            }
+            Message::CreatePrModalToggled(open) => {
+                self.pr_modal = open;
+                if open {
+                    self.pr_title.clear();
+                    self.pr_body = iced::widget::text_editor::Content::new();
+                }
+                iced::Task::none()
+            }
+            Message::PrTitleChanged(title) => {
+                self.pr_title = title;
+                iced::Task::none()
+            }
+            Message::PrBodyEdited(action) => {
+                self.pr_body.perform(action);
+                iced::Task::none()
+            }
+            Message::CreatePrPressed => {
+                let title = self.pr_title.trim().to_owned();
+                let body = self.pr_body.text();
+                if title.is_empty() || self.repo.is_none() {
+                    return iced::Task::none();
+                }
+                let Some(open) = self.repo.as_ref() else {
+                    return iced::Task::none();
+                };
+                if !open.status.has_upstream {
+                    self.error =
+                        Some("Publica la rama primero (sin upstream no puede crearse el PR).".into());
+                    return iced::Task::none();
+                }
+                self.loading = true;
+                let repo_path = open.entry.path.clone();
+                iced::Task::perform(
+                    async move { crate::github::create_pr(repo_path, title, body).await },
+                    Message::PrCreated,
+                )
+            }
+            Message::PrCreated(result) => match result {
+                Ok(url) => {
+                    self.loading = false;
+                    self.error = None;
+                    self.notice = Some(format!("PR creado: {url}"));
+                    self.pr_modal = false;
+                    self.prs_loaded = false;
+                    self.load_prs()
+                }
+                Err(err) => {
+                    self.loading = false;
+                    self.error = Some(err);
+                    iced::Task::none()
+                }
+            },
+            Message::CheckoutPr { number } => {
+                self.loading = true;
+                let Some(repo_path) = self.repo_path() else {
+                    self.loading = false;
+                    return iced::Task::none();
+                };
+                iced::Task::perform(
+                    async move { crate::github::checkout_pr(repo_path, number).await },
+                    Message::PrCheckoutDone,
+                )
+            }
+            Message::PrCheckoutDone(result) => {
+                self.loading = false;
+                match result {
+                    Ok(()) => {
+                        self.error = None;
+                        self.notice = Some("Rama del PR activada.".into());
+                        self.selected = None;
+                        self.diff = None;
+                        self.last_refresh = None;
+                        let refresh = self.refresh();
+                        match self.repo_path() {
+                            Some(path) => iced::Task::batch([refresh, branches_task(path)]),
+                            None => refresh,
+                        }
+                    }
+                    Err(err) => {
+                        self.error = Some(err);
+                        iced::Task::none()
+                    }
+                }
+            }
+            Message::OpenUrl(url) => iced::Task::perform(
+                async move { crate::github::open_url(url).await },
+                |_| Message::ClearNotice,
+            ),
 
             Message::ClearError => {
                 self.error = None;
@@ -1321,6 +1453,17 @@ impl App {
         }
     }
 
+    /// Carga los PRs abiertos vía gh (si el repo es de GitHub).
+    fn load_prs(&mut self) -> iced::Task<Message> {
+        match self.repo_path() {
+            Some(path) => iced::Task::perform(
+                async move { crate::github::pull_requests(path).await },
+                Message::PrsLoaded,
+            ),
+            None => iced::Task::none(),
+        }
+    }
+
     /// Recarga la lista de stashes.
     fn load_stashes(&mut self) -> iced::Task<Message> {
         match self.repo_path() {
@@ -1368,7 +1511,7 @@ impl App {
     }
 
     /// ¿Existe un ejecutable en PATH?
-    fn which_exists(binary: &str) -> bool {
+    pub fn which_exists(binary: &str) -> bool {
         std::env::var_os("PATH")
             .map(|paths| {
                 std::env::split_paths(&paths).any(|dir| {
@@ -1378,7 +1521,7 @@ impl App {
             .unwrap_or(false)
     }
 
-    fn repo_path(&self) -> Option<PathBuf> {
+    pub fn repo_path(&self) -> Option<PathBuf> {
         self.repo.as_ref().map(|open| open.entry.path.clone())
     }
 

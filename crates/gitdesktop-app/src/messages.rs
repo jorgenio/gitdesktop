@@ -10,6 +10,7 @@ use iced::widget::text_editor;
 pub enum Tab {
     Changes,
     History,
+    PullRequests,
 }
 
 /// Operación sobre el índice/workdir cuya finalización se reporta.
@@ -150,6 +151,18 @@ pub enum Message {
     BlameRequested { path: String },
     BlameLoaded(Result<(String, Vec<gitdesktop_core::BlameLine>), String>),
     BlameClosed,
+
+    // ——— GitHub: PRs (M7) ———
+    PrsLoaded(Result<Vec<crate::github::PullRequest>, String>),
+    PrSelected(Option<i64>),
+    CreatePrModalToggled(bool),
+    PrTitleChanged(String),
+    PrBodyEdited(iced::widget::text_editor::Action),
+    CreatePrPressed,
+    PrCreated(Result<String, String>),
+    CheckoutPr { number: i64 },
+    OpenUrl(String),
+    PrCheckoutDone(Result<(), String>),
 
     // ——— Red (fetch/pull/push/clone vía CLI git) ———
     /// Inicia una operación de red (botón contextual de la cabecera).

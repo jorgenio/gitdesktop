@@ -4,6 +4,7 @@
 pub mod changes;
 pub mod diff_view;
 pub mod history;
+pub mod prs;
 pub mod titlebar;
 
 use iced::widget::{button, canvas, center, column, container, mouse_area, pick_list, row, rule, scrollable, space, text, text_input, Stack};
@@ -163,12 +164,14 @@ fn sidebar<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
     let tabs = row![
         tab_button(app.tab, Tab::Changes, format!("Cambios ({})", open.status.entries.len())),
         tab_button(app.tab, Tab::History, "Historial".to_owned()),
+        tab_button(app.tab, Tab::PullRequests, "PRs".to_owned()),
     ]
     .width(Fill);
 
     let content = match app.tab {
         Tab::Changes => changes::view(app, open),
         Tab::History => history::list(app),
+        Tab::PullRequests => prs::list(app),
     };
 
     container(
@@ -283,6 +286,7 @@ fn main_panel(app: &App) -> Element<'_, Message> {
             }
         }
         Tab::History => history::detail(app),
+        Tab::PullRequests => prs::detail(app),
     }
 }
 
@@ -364,6 +368,9 @@ fn modals(app: &App) -> Element<'_, Message> {
     }
     if app.clone_modal {
         return clone_modal(app);
+    }
+    if app.pr_modal {
+        return prs::create_modal(app);
     }
     column![].into()
 }

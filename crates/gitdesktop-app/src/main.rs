@@ -3,6 +3,7 @@
 //! Punto de entrada de la UI: iced 0.14 con arquitectura Elm.
 //! El plan completo del proyecto está en `PLAN.md` (raíz del repo).
 
+mod github;
 mod messages;
 mod state;
 mod subscriptions;
