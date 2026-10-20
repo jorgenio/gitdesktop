@@ -145,6 +145,15 @@ impl GitEngine for NativeEngine {
     fn commit_merge(&self) -> Result<()> {
         branch_cli(&self.path, &["commit", "--no-edit"])
     }
+
+    fn conflict_markers_remaining(&self, path: &str) -> Result<bool> {
+        let full = self.workdir_path(path);
+        let content = std::fs::read_to_string(&full)
+            .map_err(|e| crate::error::io_err(&full, e))?;
+        Ok(content
+            .lines()
+            .any(|line| line.starts_with("<<<<<<<") || line.starts_with(">>>>>>>")))
+    }
 }
 
 /// Ejecuta git CLI y traduce los errores con el mensaje real de git.

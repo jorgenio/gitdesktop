@@ -54,7 +54,7 @@ const MENUS: [(&str, &[MenuItem]); 6] = [
         &[
             MenuItem::action("Cambios", MenuAction::ShowChanges),
             MenuItem::action("Historial", MenuAction::ShowHistory),
-            MenuItem::disabled("Alternar tema claro/oscuro (fase 2)"),
+            MenuItem::action("Alternar tema claro/oscuro", MenuAction::ToggleTheme),
         ],
     ),
     (

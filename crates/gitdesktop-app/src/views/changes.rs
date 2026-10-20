@@ -71,6 +71,18 @@ fn file_row<'a>(app: &'a App, entry: &'a FileEntry) -> Element<'a, Message> {
     .spacing(6)
     .align_y(Alignment::Center);
 
+    // En conflicto: abrir en Jorgenio Text para resolver marcadores.
+    if entry.status == gitdesktop_core::FileStatus::Conflicted {
+        controls = controls.push(
+            button(text("editar").size(10).style(theme::notice))
+                .on_press(Message::ResolveInEditor {
+                    path: entry.path.clone(),
+                })
+                .padding([3, 6])
+                .style(theme::menu_item),
+        );
+    }
+
     // Descartar solo tiene sentido para cambios sin preparar.
     if !entry.staged {
         controls = controls.push(

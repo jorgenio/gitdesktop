@@ -22,6 +22,12 @@ const REFRESH_MIN_INTERVAL: Duration = Duration::from_millis(800);
 /// Frecuencia del fetch automático en segundo plano.
 const AUTO_FETCH_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
+/// Sufijo de ejecutables según la plataforma.
+#[cfg(target_os = "windows")]
+const BINARY_SUFFIX: &str = ".exe";
+#[cfg(not(target_os = "windows"))]
+const BINARY_SUFFIX: &str = "";
+
 /// Operación de red en curso (identidad de la suscripción + guardas).
 #[derive(Debug, Clone)]
 pub struct NetRun {
@@ -179,11 +185,11 @@ impl App {
     pub fn subscription(&self) -> iced::Subscription<Message> {
         let mut subs: Vec<iced::Subscription<Message>> = Vec::new();
 
-        if self.repo.is_some() {
-            subs.push(
-                iced::time::every(std::time::Duration::from_millis(2000))
-                    .map(|_| Message::AutoRefresh),
-            );
+        if let Some(open) = &self.repo {
+            // Watcher notify (guardados) + temporizador de auto-fetch.
+            subs.push(crate::subscriptions::repository_activities(
+                open.entry.path.clone(),
+            ));
         }
 
         if let Some(run) = &self.running_op {
@@ -244,6 +250,7 @@ impl App {
                         self.merge_target = None;
                         self.load_branches()
                     }
+                    MenuAction::ToggleTheme => self.toggle_theme(),
                     MenuAction::About => {
                         self.about = true;
                         iced::Task::none()
@@ -294,7 +301,9 @@ impl App {
                 None => iced::Task::none(),
             },
             Message::RepoOpened(result) => match result {
-                Ok((path, status)) => self.on_repo_opened(path, status),
+                Ok((path, status, auto_resolved)) => {
+                    self.on_repo_opened(path, status, auto_resolved)
+                }
                 Err(err) => {
                     self.loading = false;
                     self.error = Some(err);
@@ -467,6 +476,30 @@ impl App {
                 }
             },
 
+            Message::ResolveInEditor { path } => {
+                let Some(open) = self.repo.as_ref() else {
+                    return iced::Task::none();
+                };
+                let full = open.entry.path.join(&path);
+                if Self::which_exists("jorgenio") {
+                    match std::process::Command::new("jorgenio").arg(&full).spawn() {
+                        Ok(_) => {
+                            self.notice =
+                                Some(format!("Abierto en Jorgenio Text: {path}"));
+                        }
+                        Err(err) => {
+                            self.error = Some(format!("No se pudo abrir jorgenio: {err}"));
+                        }
+                    }
+                } else {
+                    self.error = Some(
+                        "Jorgenio Text no está en PATH. Instálalo (cargo install --path                          Projects/text-editor/crates/jorgenio) o abre el archivo con tu editor."
+                            .into(),
+                    );
+                    let _ = open::that(&full);
+                }
+                iced::Task::none()
+            }
             Message::ClearError => {
                 self.error = None;
                 iced::Task::none()
@@ -683,9 +716,16 @@ impl App {
         &mut self,
         path: PathBuf,
         status: RepoStatus,
+        auto_resolved: Vec<String>,
     ) -> iced::Task<Message> {
         self.loading = false;
         self.error = None;
+        if !auto_resolved.is_empty() {
+            self.notice = Some(format!(
+                "Resueltos automáticamente al guardar (sin marcadores): {}",
+                auto_resolved.join(", ")
+            ));
+        }
 
         let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
         let is_switching = self
@@ -833,6 +873,27 @@ impl App {
         }
     }
 
+    /// Alterna claro/oscuro y persiste la preferencia.
+    fn toggle_theme(&mut self) -> iced::Task<Message> {
+        self.data.ui.theme = match self.data.ui.theme.as_str() {
+            "light" => "dark".to_owned(),
+            _ => "light".to_owned(),
+        };
+        self.persist();
+        iced::Task::none()
+    }
+
+    /// ¿Existe un ejecutable en PATH?
+    fn which_exists(binary: &str) -> bool {
+        std::env::var_os("PATH")
+            .map(|paths| {
+                std::env::split_paths(&paths).any(|dir| {
+                    dir.join(format!("{binary}{BINARY_SUFFIX}")).is_file()
+                })
+            })
+            .unwrap_or(false)
+    }
+
     fn repo_path(&self) -> Option<PathBuf> {
         self.repo.as_ref().map(|open| open.entry.path.clone())
     }
@@ -933,10 +994,30 @@ pub fn open_task(path: PathBuf) -> iced::Task<Message> {
     iced::Task::perform(open_repo(path), Message::RepoOpened)
 }
 
-async fn open_repo(path: PathBuf) -> Result<(PathBuf, RepoStatus), String> {
+async fn open_repo(
+    path: PathBuf,
+) -> Result<(PathBuf, RepoStatus, Vec<String>), String> {
     let engine = gitdesktop_core::open(&path).map_err(|err| err.to_string())?;
-    let status = engine.status().map_err(|err| err.to_string())?;
-    Ok((engine.path().to_path_buf(), status))
+    let mut status = engine.status().map_err(|err| err.to_string())?;
+
+    // Auto-resolución: si un archivo en conflicto ya no tiene marcadores
+    // (el usuario lo editó fuera, p. ej. en Jorgenio Text), se prepara
+    // como resuelto y se avisa en la próxima actualización.
+    let mut auto_resolved: Vec<String> = Vec::new();
+    for entry in &status.entries {
+        if entry.status == gitdesktop_core::FileStatus::Conflicted
+            && matches!(engine.conflict_markers_remaining(&entry.path), Ok(false))
+        {
+            if engine.stage(&entry.path).is_ok() {
+                auto_resolved.push(entry.path.clone());
+            }
+        }
+    }
+    if !auto_resolved.is_empty() {
+        status = engine.status().map_err(|err| err.to_string())?;
+    }
+
+    Ok((engine.path().to_path_buf(), status, auto_resolved))
 }
 
 /// Ejecuta una operación genérica del motor y reporta con [`Op`].

@@ -75,6 +75,10 @@ pub trait GitEngine: Send {
 
     /// Confirma el merge tras resolver conflictos (`git commit --no-edit`).
     fn commit_merge(&self) -> Result<()>;
+
+    /// ¿Quedan marcadores de conflicto (`<<<<<<<`) en el archivo del
+    /// directorio de trabajo? `Ok(false)` = listo para marcar resuelto.
+    fn conflict_markers_remaining(&self, path: &str) -> Result<bool>;
 }
 
 /// Abre un repositorio existente con el motor nativo (libgit2).

@@ -20,6 +20,8 @@ time = { version = "0.3", features = ["serde", "serde-well-known", "formatting",
 rfd = "0.15"
 tempfile = "3"
 image = { version = "0.25", default-features = false, features = ["png"] }
+notify = "8"
+open = "5"
 
 [profile.release]
 lto = "thin"

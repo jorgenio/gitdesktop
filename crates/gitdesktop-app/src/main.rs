@@ -14,7 +14,7 @@ use state::App;
 pub fn main() -> iced::Result {
     iced::application(App::new, App::update, App::view)
         .title(App::title)
-        .theme(|_state: &App| theme::gitdesktop())
+        .theme(|state: &App| theme::current(&state.data.ui.theme))
         .window(iced::window::Settings {
             icon: Some(load_icon()),
             ..Default::default()

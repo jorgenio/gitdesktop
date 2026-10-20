@@ -40,6 +40,7 @@ pub enum MenuAction {
     ShowHistory,
     NewBranch,
     MergeBranches,
+    ToggleTheme,
     About,
     Quit,
 }
@@ -62,7 +63,7 @@ pub enum Message {
     // ——— Repositorios ———
     OpenFolderDialog,
     FolderPicked(Option<PathBuf>),
-    RepoOpened(Result<(PathBuf, RepoStatus), String>),
+    RepoOpened(Result<(PathBuf, RepoStatus, Vec<String>), String>),
     OpenRecent(String),
     /// Refresco automático (polling), con anti-rebote.
     AutoRefresh,
@@ -121,6 +122,9 @@ pub enum Message {
     NetProgress(gitdesktop_core::Progress),
     /// Operación terminada (Ok con resumen o Err con mensaje de git).
     NetDone(gitdesktop_core::NetOpKind, Result<String, String>),
+
+    /// Abre el archivo (en conflicto) en el editor del usuario (jorgenio).
+    ResolveInEditor { path: String },
 
     ClearError,
     ClearNotice,

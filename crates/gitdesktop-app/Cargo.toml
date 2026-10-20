@@ -15,8 +15,10 @@ gitdesktop-core = { workspace = true }
 iced = { workspace = true }
 rfd = { workspace = true }
 time = { workspace = true }
-tokio = { version = "1", features = ["process", "io-util"] }
+tokio = { version = "1", features = ["process", "io-util", "sync"] }
 image = { workspace = true }
+notify = { workspace = true }
+open = { workspace = true }
 
 [package.metadata.deb]
 maintainer = "Jorgenio <jorgenio@users.noreply.github.com>"

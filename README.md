@@ -8,12 +8,14 @@ pull, push y merge sin tocar la terminal.
 - **UI:** [iced](https://iced.rs) 0.14 · **Motor Git:** libgit2 (`git2`) + CLI `git`
 - **Plan completo:** [`PLAN.md`](./PLAN.md)
 
-## Estado (M0)
+## Estado (v0.1.1)
 
-- [x] Workspace de Cargo (`gitdesktop-core` + `gitdesktop-app`)
-- [x] Persistencia de la lista de repositorios (escritura atómica + backup)
-- [x] Abrir repositorio y mostrar su estado (rama, ahead/behind, archivos modificados)
-- [ ] Stage/unstage, diffs, commits (M1)
+- [x] Gestor Git completo: abrir/clone, stage/unstage, discard, commits,
+      diff unificado, historial con detalle
+- [x] Ramas: crear/cambiar/eliminar + merge con resolución de conflictos
+- [x] Fetch/Pull/Push/Publish con progreso y credenciales del sistema
+- [x] Barra de título personalizada con menús (estilo GitHub Desktop)
+- [x] Instaladores: `.deb` + AppImage (Linux) y MSI (Windows) en cada tag
 
 ## Instalación
 

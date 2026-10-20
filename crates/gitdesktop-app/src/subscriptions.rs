@@ -1,19 +1,78 @@
-//! Suscripciones: operaciones de red con progreso en vivo.
+//! Suscripciones: watcher del filesystem y operaciones de red con progreso.
 //!
-//! Cada operación se ejecuta como `git --progress` en un subproceso tokio;
-//! stderr se lee línea a línea y se traduce a `Message::NetProgress`. El
-//! prechequeo (remotos/upstream) usa libgit2 para dar errores claros sin
-//! llegar a ejecutar git.
+//! El watcher usa `notify` con un canal unbounded de tokio (Send de
+//! principio a fin); al detectar guardados emite `AutoRefresh`, que pasa
+//! por el anti-rebote del estado. El prechequeo de red y el `git
+//! --progress` se ejecutan en subprocesos tokio.
 
 use std::path::PathBuf;
 
 use gitdesktop_core::{NetOpKind, cli};
+use iced::futures::SinkExt;
 use iced::stream;
 use iced::Subscription;
-use iced::futures::SinkExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::messages::Message;
+
+/// Suscripciones agregadas mientras haya un repositorio abierto:
+/// watcher del filesystem + temporizador de auto-fetch.
+pub fn repository_activities(path: PathBuf) -> Subscription<Message> {
+    Subscription::batch([
+        Subscription::run_with(path.clone(), |path: &PathBuf| {
+            let path = path.clone();
+            watcher_stream(path)
+        }),
+        iced::time::every(std::time::Duration::from_secs(60)).map(|_| Message::AutoRefresh),
+    ])
+}
+
+/// Vigila el árbol del repositorio y emite `AutoRefresh` en cada guardado.
+/// Ignora cambios dentro de `.git` y `target`.
+fn watcher_stream(
+    path: PathBuf,
+) -> impl iced::futures::Stream<Item = Message> + 'static {
+    stream::channel::<Message>(16, async move |mut output| {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+
+        let mut watcher = match notify::recommended_watcher(
+            move |res: Result<notify::Event, notify::Error>| {
+            let relevant = match &res {
+                Ok(event) => event.paths.iter().any(|p| {
+                    let as_text = p.to_string_lossy();
+                    !as_text.contains("/.git/")
+                        && !as_text.contains("\\.git\\")
+                        && !as_text.contains("/target/")
+                        && !as_text.contains("\\target\\")
+                }),
+                Err(_) => false,
+            };
+                if relevant {
+                    let _ = tx.send(());
+                }
+            },
+        ) {
+            Ok(watcher) => watcher,
+            Err(_) => return,
+        };
+
+        if notify::Watcher::watch(&mut watcher, &path, notify::RecursiveMode::Recursive)
+            .is_err()
+        {
+            return;
+        }
+
+        // El watcher vive mientras la suscripción exista (su drop detiene
+        // el hilo interno de notify y cierra el canal).
+        while rx.recv().await.is_some() {
+            // Drena ráfagas de eventos: un solo AutoRefresh por ráfaga.
+            while rx.try_recv().is_ok() {}
+            if output.send(Message::AutoRefresh).await.is_err() {
+                return;
+            }
+        }
+    })
+}
 
 /// Suscripción de una operación de red. La identidad es
 /// `(ruta, rama, tipo)`; mientras `App.running_op` exista, la suscripción
@@ -31,35 +90,41 @@ pub fn network_op(path: PathBuf, branch: String, kind: NetOpKind) -> Subscriptio
                 }
             };
 
-            let remotes = match engine.remotes() {
-                Ok(remotes) => remotes,
-                Err(err) => {
-                    let _ = output.send(Message::NetDone(kind, Err(err.to_string()))).await;
-                    return;
-                }
-            };
-            if remotes.is_empty() {
-                let _ = output
-                    .send(Message::NetDone(
-                        kind,
-                        Err("El repositorio no tiene remotos configurados (git remote add …).".into()),
-                    ))
-                    .await;
-                return;
-            }
-
-            if kind == NetOpKind::Pull {
-                let has_upstream = engine.status().map(|s| s.has_upstream).unwrap_or(false);
-                if !has_upstream {
+            if !matches!(kind, NetOpKind::Clone { .. }) {
+                let remotes = match engine.remotes() {
+                    Ok(remotes) => remotes,
+                    Err(err) => {
+                        let _ = output.send(Message::NetDone(kind, Err(err.to_string()))).await;
+                        return;
+                    }
+                };
+                if remotes.is_empty() {
                     let _ = output
                         .send(Message::NetDone(
                             kind,
-                            Err(format!(
-                                "La rama «{branch}» no tiene upstream; usa «Publicar rama» primero."
-                            )),
+                            Err(
+                                "El repositorio no tiene remotos configurados (git remote add …)."
+                                    .into(),
+                            ),
                         ))
                         .await;
                     return;
+                }
+
+                if kind == NetOpKind::Pull {
+                    let has_upstream =
+                        engine.status().map(|s| s.has_upstream).unwrap_or(false);
+                    if !has_upstream {
+                        let _ = output
+                            .send(Message::NetDone(
+                                kind,
+                                Err(format!(
+                                    "La rama «{branch}» no tiene upstream; usa «Publicar rama» primero."
+                                )),
+                            ))
+                            .await;
+                        return;
+                    }
                 }
             }
             drop(engine); // libera libgit2 antes de ejecutar el subproceso
