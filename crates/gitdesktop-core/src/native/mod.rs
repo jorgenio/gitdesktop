@@ -146,6 +146,50 @@ impl GitEngine for NativeEngine {
         branch_cli(&self.path, &["commit", "--no-edit"])
     }
 
+    fn rebase(&self, name: &str) -> Result<MergeOutcome> {
+        let output = cli::run(&self.path, &["rebase", "--no-edit", name])
+            .map_err(|e| GitoError::GitCli(format!("no se pudo ejecutar git: {e}")))?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let combined = format!("{stdout}\n{stderr}");
+
+        if combined.contains("CONFLICT") {
+            let conflicted = self
+                .status()?
+                .entries
+                .iter()
+                .filter(|entry| entry.status == crate::models::FileStatus::Conflicted)
+                .map(|entry| entry.path.clone())
+                .collect::<Vec<_>>();
+            return Ok(MergeOutcome::Conflicts(conflicted));
+        }
+
+        if output.status.success() {
+            if combined.contains("is up to date") {
+                Ok(MergeOutcome::UpToDate)
+            } else {
+                Ok(MergeOutcome::Merged)
+            }
+        } else {
+            let text = last_line(&stderr).unwrap_or_else(|| {
+                last_line(&stdout).unwrap_or_else(|| "git rebase falló".into())
+            });
+            Err(GitoError::GitCli(text))
+        }
+    }
+
+    fn continue_rebase(&self) -> Result<()> {
+        branch_cli_with_env(
+            &self.path,
+            &["rebase", "--continue"],
+            [("GIT_EDITOR", "true")],
+        )
+    }
+
+    fn abort_rebase(&self) -> Result<()> {
+        branch_cli(&self.path, &["rebase", "--abort"])
+    }
+
     fn conflict_markers_remaining(&self, path: &str) -> Result<bool> {
         let full = self.workdir_path(path);
         let content = std::fs::read_to_string(&full)
@@ -160,6 +204,25 @@ impl GitEngine for NativeEngine {
 fn branch_cli(repo: &Path, args: &[&str]) -> Result<()> {
     let output = cli::run(repo, args)
         .map_err(|e| GitoError::GitCli(format!("no se pudo ejecutar git: {e}")))?;
+    finish_branch_cli(output, args)
+}
+
+/// Variante con variables de entorno extra (p. ej. GIT_EDITOR=true).
+fn branch_cli_with_env(
+    repo: &Path,
+    args: &[&str],
+    envs: [(&str, &str); 1],
+) -> Result<()> {
+    let output = std::process::Command::new("git")
+        .current_dir(repo)
+        .args(args)
+        .envs(envs)
+        .output()
+        .map_err(|e| GitoError::GitCli(format!("no se pudo ejecutar git: {e}")))?;
+    finish_branch_cli(output, args)
+}
+
+fn finish_branch_cli(output: std::process::Output, args: &[&str]) -> Result<()> {
     if output.status.success() {
         return Ok(());
     }

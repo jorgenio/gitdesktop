@@ -7,6 +7,26 @@ use iced::{Alignment, Element, Fill, Length};
 
 use gitdesktop_core::FileEntry;
 
+/// Botón de fila de diálogo con estado habilitado opcional.
+fn dialog_button_inline<'a>(
+    label: &'static str,
+    message: Message,
+    style: fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style,
+    enabled: bool,
+) -> Element<'a, Message> {
+    button(
+        text(label)
+            .size(12)
+            .align_x(Alignment::Center)
+            .width(Fill),
+    )
+    .on_press_maybe(enabled.then_some(message))
+    .padding([8, 0])
+    .width(Fill)
+    .style(style)
+    .into()
+}
+
 use crate::messages::Message;
 use crate::state::{App, OpenRepo};
 use crate::theme;
@@ -130,9 +150,11 @@ fn container_row<'a>(
 /// cuando hay una fusión en curso con conflictos).
 fn commit_panel<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
     let merging = open.status.merging;
+    let rebasing = open.status.rebasing;
     let can_commit = open.status.staged_count() > 0
         && !app.summary.trim().is_empty()
-        && !merging;
+        && !merging
+        && !rebasing;
 
     let branch = if open.status.branch.is_empty() {
         "main".to_owned()
@@ -142,30 +164,20 @@ fn commit_panel<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
 
     let merge_row: Element<'a, Message> = if merging {
         row![
-            button(
-                text("Confirmar merge")
-                    .size(12)
-                    .align_x(Alignment::Center)
-                    .width(Fill),
-            )
-            .on_press_maybe(if open.status.staged_count() > 0 {
-                Some(Message::MergeCommitPressed)
-            } else {
-                None
-            })
-            .padding([8, 0])
-            .width(Fill)
-            .style(button::primary),
-            button(
-                text("Abortar")
-                    .size(12)
-                    .align_x(Alignment::Center)
-                    .width(Fill),
-            )
-            .on_press(Message::MergeAborted)
-            .padding([8, 0])
-            .width(Fill)
-            .style(button::danger),
+            dialog_button_inline("Confirmar merge", Message::MergeCommitPressed, button::primary, open.status.staged_count() > 0),
+            dialog_button_inline("Abortar", Message::MergeAborted, button::danger, true),
+        ]
+        .spacing(8)
+        .into()
+    } else if rebasing {
+        row![
+            dialog_button_inline(
+                "Continuar rebase",
+                Message::RebaseContinuePressed,
+                button::primary,
+                open.status.staged_count() > 0,
+            ),
+            dialog_button_inline("Abortar rebase", Message::RebaseAbortPressed, button::danger, true),
         ]
         .spacing(8)
         .into()
@@ -175,6 +187,8 @@ fn commit_panel<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
 
     let commit_button_label = if merging {
         "Commit normal deshabilitado durante el merge".to_owned()
+    } else if rebasing {
+        "Commit normal deshabilitado durante el rebase".to_owned()
     } else {
         format!("Hacer commit en {branch}")
     };

@@ -16,9 +16,15 @@ pub(super) fn history(repo: &git2::Repository, limit: usize) -> Result<Vec<Commi
         let oid = oid?;
         let commit = repo.find_commit(oid)?;
 
+        let parents = commit
+            .parent_ids()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>();
+
         commits.push(CommitSummary {
             id: oid.to_string(),
             short_id: oid.to_string()[..7].to_owned(),
+            parents,
             summary: commit
                 .summary()
                 .ok()

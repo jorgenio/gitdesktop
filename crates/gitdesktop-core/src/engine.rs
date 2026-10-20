@@ -79,6 +79,16 @@ pub trait GitEngine: Send {
     /// ¿Quedan marcadores de conflicto (`<<<<<<<`) en el archivo del
     /// directorio de trabajo? `Ok(false)` = listo para marcar resuelto.
     fn conflict_markers_remaining(&self, path: &str) -> Result<bool>;
+
+    /// Rebase de la rama actual sobre `name` (`git rebase --no-edit`).
+    /// Devuelve [`MergeOutcome::Conflicts`] si el rebase quedó pendiente.
+    fn rebase(&self, name: &str) -> Result<MergeOutcome>;
+
+    /// Continúa el rebase tras resolver (`git rebase --continue`).
+    fn continue_rebase(&self) -> Result<()>;
+
+    /// Abandona el rebase (`git rebase --abort`).
+    fn abort_rebase(&self) -> Result<()>;
 }
 
 /// Abre un repositorio existente con el motor nativo (libgit2).

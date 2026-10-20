@@ -1,7 +1,8 @@
 //! Vista «Historial»: lista de commits (izquierda) + detalle con archivos
 //! y diff del commit seleccionado (panel derecho).
 
-use iced::widget::{button, column, container, row, scrollable, text};
+use iced::widget::{button, canvas, column, container, row, scrollable, text};
+use crate::widgets::commit_graph::ROW_H;
 use iced::{Alignment, Element, Fill, Length};
 
 use time::macros::format_description;
@@ -30,9 +31,9 @@ pub fn list(app: &App) -> Element<'_, Message> {
         .into();
     }
 
-    let mut list = column![].spacing(1).padding([8, 4]);
+    let mut list = column![].spacing(0).padding([8, 4]);
 
-    for commit in &app.history {
+    for commit in app.history.iter() {
         let is_selected = app.selected_commit.as_deref() == Some(commit.id.as_str());
 
         let date = commit
@@ -53,8 +54,9 @@ pub fn list(app: &App) -> Element<'_, Message> {
                     .width(Fill),
                 )
                 .on_press(Message::CommitSelected(commit.id.clone()))
-                .padding([6, 8])
+                .padding([4, 8])
                 .width(Fill)
+                .height(Length::Fixed(ROW_H - 0.0))
                 .style(theme::ghost),
             )
             .width(Fill)
@@ -62,7 +64,20 @@ pub fn list(app: &App) -> Element<'_, Message> {
         );
     }
 
-    scrollable(list).height(Fill).into()
+    // Grafo (canvas) y lista comparten el MISMO scrollable para
+    // desplazarse en sincronía.
+    let graph = crate::widgets::commit_graph::GraphCanvas {
+        rows: &app.graph_rows,
+    };
+    let graph = container(canvas::Canvas::new(graph))
+        .width(Length::Fixed(44.0))
+        .style(theme::sidebar);
+
+    scrollable(
+        row![graph, list].width(Fill),
+    )
+    .height(Fill)
+    .into()
 }
 
 /// Detalle del commit seleccionado (panel derecho).

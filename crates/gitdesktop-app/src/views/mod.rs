@@ -275,6 +275,9 @@ fn modals(app: &App) -> Element<'_, Message> {
     if app.merge_modal {
         return merge_modal(app);
     }
+    if app.status_rebasing() {
+        return rebase_paused_modal(app);
+    }
     if app.clone_modal {
         return clone_modal(app);
     }
@@ -461,7 +464,7 @@ fn branch_modal(app: &App) -> Element<'_, Message> {
     .into()
 }
 
-/// Modal de fusión: elige la rama a integrar en la actual.
+/// Modal de integración: fusión o rebase según el modo.
 fn merge_modal(app: &App) -> Element<'_, Message> {
     let current = app
         .repo
@@ -476,9 +479,22 @@ fn merge_modal(app: &App) -> Element<'_, Message> {
         .map(|branch| branch.name.clone())
         .collect();
 
+    let (title, verb, on_go) = match app.merge_mode {
+        crate::messages::MergeMode::Merge => (
+            format!("Fusionar en «{current}»"),
+            "Fusionar",
+            Message::MergePressed,
+        ),
+        crate::messages::MergeMode::Rebase => (
+            format!("Rebase de «{current}» sobre…"),
+            "Rebase",
+            Message::RebasePressed,
+        ),
+    };
+
     let card = container(
         column![
-            text(format!("Fusionar en «{current}»")).size(18),
+            text(title).size(18),
             text("Elige la rama cuyos cambios quieres integrar.")
                 .size(12)
                 .style(theme::muted),
@@ -490,11 +506,7 @@ fn merge_modal(app: &App) -> Element<'_, Message> {
             .width(Fill),
             row![
                 dialog_button("Cancelar", Message::MergeModalToggled(false), button::text),
-                dialog_button(
-                    "Fusionar",
-                    Message::MergePressed,
-                    button::primary,
-                ),
+                dialog_button(&verb, on_go, button::primary),
             ]
             .spacing(10),
         ]
@@ -509,6 +521,39 @@ fn merge_modal(app: &App) -> Element<'_, Message> {
         center(card).width(Fill).height(Fill).into(),
     ])
     .into()
+}
+
+/// Modal cuando un rebase quedó pausado con conflictos.
+fn rebase_paused_modal(_app: &App) -> Element<'_, Message> {
+    let card = container(
+        column![
+            text("Rebase pausado").size(18),
+            text(
+                "Quedan conflictos sin resolver. Edítalos y márcalos como                  resueltos (checkbox); luego pulsa «Continuar rebase» o aborta."
+            )
+            .size(12)
+            .style(theme::muted),
+            row![
+                dialog_button(
+                    "Abortar rebase",
+                    Message::RebaseAbortPressed,
+                    button::danger,
+                ),
+                dialog_button(
+                    "Continuar rebase",
+                    Message::RebaseContinuePressed,
+                    button::primary,
+                ),
+            ]
+            .spacing(10),
+        ]
+        .spacing(12)
+        .max_width(420),
+    )
+    .padding(24)
+    .style(theme::panel);
+
+    Stack::with_children(vec![center(card).width(Fill).height(Fill).into()]).into()
 }
 
 /// Modal de clonación: URL + carpeta de destino + progreso.

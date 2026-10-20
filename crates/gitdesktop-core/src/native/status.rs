@@ -49,6 +49,7 @@ pub(super) fn status(repo: &git2::Repository) -> Result<RepoStatus> {
         has_upstream,
         has_remote,
         merging: merge_in_progress(repo),
+        rebasing: rebase_in_progress(repo),
         entries,
     })
 }
@@ -56,6 +57,12 @@ pub(super) fn status(repo: &git2::Repository) -> Result<RepoStatus> {
 /// `true` si hay un merge en curso (MERGE_HEAD pendiente de confirmar).
 fn merge_in_progress(repo: &git2::Repository) -> bool {
     repo.path().join("MERGE_HEAD").exists()
+}
+
+/// `true` si hay un rebase en curso.
+fn rebase_in_progress(repo: &git2::Repository) -> bool {
+    repo.path().join("rebase-merge").exists()
+        || repo.path().join("rebase-apply").exists()
 }
 
 fn entry_path(entry: &git2::StatusEntry<'_>) -> String {

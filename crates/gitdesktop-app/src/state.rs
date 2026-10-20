@@ -11,7 +11,8 @@ use gitdesktop_core::{
 use iced::widget::text_editor;
 use time::OffsetDateTime;
 
-use crate::messages::{BranchOpResult, MenuAction, Message, Op, Tab};
+use crate::messages::{BranchOpResult, MenuAction, Message, MergeMode, Op, Tab};
+use crate::widgets::commit_graph::GraphRow;
 use crate::widgets::conflict_editor::{ConflictEditor, EditAction, EDITOR_VISIBLE_LINES};
 
 /// Límite de commits cargados en el historial.
@@ -65,6 +66,10 @@ pub struct App {
     // Ramas (M4)
     pub branches: Vec<BranchInfo>,
     pub branch_modal: bool,
+    /// Carriles del grafo (uno por commit, misma longitud que `history`).
+    pub graph_rows: Vec<GraphRow>,
+    /// Modal de fusión en modo merge o rebase.
+    pub merge_mode: MergeMode,
     pub new_branch_name: String,
     pub pending_delete_branch: Option<String>,
     pub merge_modal: bool,
@@ -143,6 +148,8 @@ impl App {
                 net_progress: None,
                 last_fetch: None,
                 branches: Vec::new(),
+                graph_rows: Vec::new(),
+                merge_mode: MergeMode::Merge,
                 branch_modal: false,
                 new_branch_name: String::new(),
                 pending_delete_branch: None,
@@ -256,6 +263,13 @@ impl App {
                     }
                     MenuAction::MergeBranches => {
                         self.merge_modal = true;
+                        self.merge_mode = MergeMode::Merge;
+                        self.merge_target = None;
+                        self.load_branches()
+                    }
+                    MenuAction::RebaseBranches => {
+                        self.merge_modal = true;
+                        self.merge_mode = MergeMode::Rebase;
                         self.merge_target = None;
                         self.load_branches()
                     }
@@ -421,6 +435,8 @@ impl App {
             // ——— Pestaña Historial ———
             Message::LogLoaded(result) => match result {
                 Ok(commits) => {
+                    self.graph_rows =
+                        crate::widgets::commit_graph::compute_lanes(&commits);
                     self.history = commits;
                     if self.selected_commit.is_none() {
                         if let Some(first) = self.history.first().cloned() {
@@ -526,6 +542,57 @@ impl App {
                 }
                 iced::Task::none()
             }
+            Message::RebasePressed => {
+                let Some(target) = self.merge_target.clone() else {
+                    return iced::Task::none();
+                };
+                let Some(repo_path) = self.repo_path() else {
+                    return iced::Task::none();
+                };
+                self.loading = true;
+                iced::Task::perform(
+                    async move {
+                        let engine =
+                            gitdesktop_core::open(&repo_path).map_err(|e| e.to_string())?;
+                        engine.rebase(&target).map_err(|e| e.to_string())
+                    },
+                    Message::RebaseDone,
+                )
+            }
+            Message::RebaseDone(result) => self.on_rebase_done(result),
+            Message::RebaseContinuePressed => {
+                self.loading = true;
+                match self.repo_path() {
+                    Some(repo_path) => op_task(
+                        repo_path,
+                        Op::RebaseContinue,
+                        |engine| engine.continue_rebase(),
+                    ),
+                    None => {
+                        self.loading = false;
+                        iced::Task::none()
+                    }
+                }
+            }
+            Message::RebaseAbortPressed => {
+                self.loading = true;
+                match self.repo_path() {
+                    Some(repo_path) => iced::Task::perform(
+                        async move {
+                            let engine = gitdesktop_core::open(&repo_path)
+                                .map_err(|e| e.to_string())?;
+                            engine.abort_rebase().map_err(|e| e.to_string())?;
+                            Ok(MergeOutcome::Aborted)
+                        },
+                        Message::RebaseDone,
+                    ),
+                    None => {
+                        self.loading = false;
+                        iced::Task::none()
+                    }
+                }
+            }
+
             Message::ClearError => {
                 self.error = None;
                 iced::Task::none()
@@ -881,6 +948,41 @@ impl App {
         }
     }
 
+    /// Tras un rebase: banners según el resultado y refresco completo.
+    fn on_rebase_done(
+        &mut self,
+        result: Result<MergeOutcome, String>,
+    ) -> iced::Task<Message> {
+        self.loading = false;
+        match result {
+            Ok(MergeOutcome::Conflicts(files)) => {
+                self.error = Some(format!(
+                    "El rebase quedó pausado con conflictos en {} archivo(s): {}. \
+                     Edítalos, márcalos como resueltos y pulsa «Continuar rebase».",
+                    files.len(),
+                    files.join(", ")
+                ));
+                self.after_merge_refresh()
+            }
+            Ok(outcome) => {
+                self.error = None;
+                self.notice = Some(match outcome {
+                    MergeOutcome::Merged => "Rebase completado.".into(),
+                    MergeOutcome::UpToDate => "La rama ya estaba sobre el objetivo.".into(),
+                    MergeOutcome::Aborted => "Rebase abortado; rama restaurada.".into(),
+                    MergeOutcome::FastForward | MergeOutcome::Conflicts(_) => {
+                        unreachable!()
+                    }
+                });
+                self.after_merge_refresh()
+            }
+            Err(err) => {
+                self.error = Some(err);
+                iced::Task::none()
+            }
+        }
+    }
+
     fn after_merge_refresh(&mut self) -> iced::Task<Message> {
         self.selected = None;
         self.diff = None;
@@ -890,6 +992,11 @@ impl App {
             Some(path) => iced::Task::batch([refresh, branches_task(path)]),
             None => refresh,
         }
+    }
+
+    /// ¿Hay un rebase pausado? (para el modal)
+    pub fn status_rebasing(&self) -> bool {
+        self.repo.as_ref().map(|open| open.status.rebasing).unwrap_or(false)
     }
 
     /// Recarga la lista de ramas.

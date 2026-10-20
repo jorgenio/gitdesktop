@@ -70,6 +70,7 @@ const MENUS: [(&str, &[MenuItem]); 6] = [
         &[
             MenuItem::action("Nueva rama…", MenuAction::NewBranch),
             MenuItem::action("Fusionar rama en la actual…", MenuAction::MergeBranches),
+            MenuItem::action("Rebase sobre rama…", MenuAction::RebaseBranches),
             MenuItem::disabled("Renombrar rama… (fase 2)"),
         ],
     ),

@@ -62,6 +62,8 @@ pub struct RepoStatus {
     pub has_remote: bool,
     /// Hay un merge en curso (existe MERGE_HEAD).
     pub merging: bool,
+    /// Hay un rebase en curso (existe rebase-merge/rebase-apply).
+    pub rebasing: bool,
     pub entries: Vec<FileEntry>,
 }
 
@@ -104,6 +106,8 @@ pub struct CommitSummary {
     pub id: String,
     /// SHA abreviado (7 caracteres) para mostrar.
     pub short_id: String,
+    /// SHAs completos de los padres (grafo).
+    pub parents: Vec<String>,
     pub summary: String,
     pub author: String,
     /// Fecha del commit en UTC (la zona horaria local llega en fase 2).

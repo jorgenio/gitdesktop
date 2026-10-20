@@ -20,6 +20,7 @@ pub enum Op {
     Discard,
     Commit,
     MergeCommit,
+    RebaseContinue,
 }
 
 /// Resultado de una operación de rama (para el banner y el refresco).
@@ -28,6 +29,13 @@ pub enum BranchOpResult {
     Created,
     Switched,
     Deleted,
+}
+
+/// Modo del modal de integración de ramas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MergeMode {
+    Merge,
+    Rebase,
 }
 
 /// Acciones disponibles en el menú principal.
@@ -40,6 +48,7 @@ pub enum MenuAction {
     ShowHistory,
     NewBranch,
     MergeBranches,
+    RebaseBranches,
     ToggleTheme,
     About,
     Quit,
@@ -106,6 +115,10 @@ pub enum Message {
     MergeDone(Result<gitdesktop_core::MergeOutcome, String>),
     MergeCommitPressed,
     MergeAborted,
+    RebasePressed,
+    RebaseDone(Result<gitdesktop_core::MergeOutcome, String>),
+    RebaseContinuePressed,
+    RebaseAbortPressed,
 
     // ——— Clone (M4) ———
     CloneModalToggled(bool),
