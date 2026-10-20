@@ -50,6 +50,8 @@ pub(super) fn status(repo: &git2::Repository) -> Result<RepoStatus> {
         has_remote,
         merging: merge_in_progress(repo),
         rebasing: rebase_in_progress(repo),
+        reverting: repo.path().join("REVERT_HEAD").exists(),
+        cherry_picking: repo.path().join("CHERRY_PICK_HEAD").exists(),
         entries,
     })
 }

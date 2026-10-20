@@ -10,7 +10,10 @@ use std::path::{Path, PathBuf};
 use crate::cli;
 use crate::engine::GitEngine;
 use crate::error::{GitoError, Result};
-use crate::models::{BranchInfo, CommitSummary, DiffLine, FileEntry, MergeOutcome, RepoStatus};
+use crate::models::{
+    BlameLine, BranchInfo, CommitSummary, DiffLine, FileEntry, MergeOutcome, RepoStatus,
+    StashEntry,
+};
 
 /// Motor basado en libgit2. Dueño exclusivo de un `git2::Repository`.
 ///
@@ -190,6 +193,112 @@ impl GitEngine for NativeEngine {
         branch_cli(&self.path, &["rebase", "--abort"])
     }
 
+    fn stashes(&self) -> Result<Vec<StashEntry>> {
+        let output = cli::run(&self.path, &[
+            "stash",
+            "list",
+            "--format=%gd%x1f%gs%x1f%ci",
+        ])
+        .map_err(|e| GitoError::GitCli(format!("no se pudo ejecutar git: {e}")))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut stashes = Vec::new();
+        for line in stdout.lines() {
+            let mut parts = line.split('\u{1f}');
+            let (Some(reference), Some(message), Some(date)) =
+                (parts.next(), parts.next(), parts.next())
+            else {
+                continue;
+            };
+            if reference.is_empty() {
+                continue;
+            }
+            stashes.push(StashEntry {
+                reference: reference.to_owned(),
+                message: message.to_owned(),
+                date: date.trim().to_owned(),
+            });
+        }
+        Ok(stashes)
+    }
+
+    fn stash_push(&self, message: Option<&str>) -> Result<()> {
+        match message {
+            Some(message) if !message.trim().is_empty() => branch_cli(
+                &self.path,
+                &["stash", "push", "--include-untracked", "-m", message],
+            ),
+            _ => branch_cli(&self.path, &["stash", "push", "--include-untracked"]),
+        }
+    }
+
+    fn stash_apply(&self, index: usize) -> Result<()> {
+        branch_cli(&self.path, &["stash", "apply", &format!("stash@{{{index}}}")])
+    }
+
+    fn stash_pop(&self, index: usize) -> Result<()> {
+        branch_cli(&self.path, &["stash", "pop", &format!("stash@{{{index}}}")])
+    }
+
+    fn stash_drop(&self, index: usize) -> Result<()> {
+        branch_cli(&self.path, &["stash", "drop", &format!("stash@{{{index}}}")])
+    }
+
+    fn revert_commit(&self, id: &str) -> Result<MergeOutcome> {
+        merge_cli(&self.path, &["revert", "--no-edit", id])
+    }
+
+    fn continue_revert(&self) -> Result<()> {
+        branch_cli_with_env(&self.path, &["revert", "--continue"], [("GIT_EDITOR", "true")])
+    }
+
+    fn cherry_pick(&self, id: &str) -> Result<MergeOutcome> {
+        merge_cli(&self.path, &["cherry-pick", id])
+    }
+
+    fn continue_cherry_pick(&self) -> Result<()> {
+        branch_cli_with_env(
+            &self.path,
+            &["cherry-pick", "--continue"],
+            [("GIT_EDITOR", "true")],
+        )
+    }
+
+    fn blame(&self, path: &str) -> Result<Vec<BlameLine>> {
+        let blame = self
+            .repo
+            .blame_file(Path::new(path), None)
+            .map_err(GitoError::Git)?;
+
+        let full = self.workdir_path(path);
+        let content =
+            std::fs::read_to_string(&full).map_err(|e| crate::error::io_err(&full, e))?;
+
+        Ok(content
+            .lines()
+            .enumerate()
+            .map(|(i, line)| {
+                let (short, author) = blame
+                    .get_line(i + 1)
+                    .and_then(|hunk| {
+                        let short = hunk.final_commit_id().to_string()[..7].to_owned();
+                        let author = hunk
+                            .final_signature()
+                            .and_then(|signature| signature.name().ok().map(str::to_owned))
+                            .unwrap_or_else(|| "?".into());
+                        Some((short, author))
+                    })
+                    .unwrap_or_else(|| ("…".into(), "…".into()));
+
+                BlameLine {
+                    short_commit: short,
+                    author,
+                    content: line.to_owned(),
+                }
+            })
+            .collect())
+    }
+
     fn conflict_markers_remaining(&self, path: &str) -> Result<bool> {
         let full = self.workdir_path(path);
         let content = std::fs::read_to_string(&full)
@@ -197,6 +306,32 @@ impl GitEngine for NativeEngine {
         Ok(content
             .lines()
             .any(|line| line.starts_with("<<<<<<<") || line.starts_with(">>>>>>>")))
+    }
+}
+
+/// Ejecuta git CLI para operaciones que devuelven [`MergeOutcome`]
+/// (merge, revert, cherry-pick) y detecta conflictos.
+fn merge_cli(repo: &Path, args: &[&str]) -> Result<MergeOutcome> {
+    let output = cli::run(repo, args)
+        .map_err(|e| GitoError::GitCli(format!("no se pudo ejecutar git: {e}")))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{stdout}\n{stderr}");
+
+    if combined.contains("CONFLICT") {
+        return Ok(MergeOutcome::Conflicts(Vec::new())); // el status los lista
+    }
+    if output.status.success() {
+        if combined.contains("Already up to date") {
+            Ok(MergeOutcome::UpToDate)
+        } else {
+            Ok(MergeOutcome::Merged)
+        }
+    } else {
+        let text = last_line(&stderr)
+            .or_else(|| last_line(&stdout))
+            .unwrap_or_else(|| "git falló".into());
+        Err(GitoError::GitCli(text))
     }
 }
 

@@ -172,11 +172,86 @@ fn sidebar<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
     };
 
     container(
-        column![tabs, rule::horizontal(1), content].width(Fill).height(Fill),
+        column![
+            tabs,
+            rule::horizontal(1),
+            content,
+            rule::horizontal(1),
+            stash_section(app),
+        ]
+        .width(Fill)
+        .height(Fill),
     )
     .style(theme::sidebar)
     .width(Length::Fixed(380.0))
     .height(Fill)
+    .into()
+}
+
+/// Sección «Stashes» (como GitHub Desktop): crear/listar/aplicar/pop/drop.
+fn stash_section<'a>(app: &'a App) -> Element<'a, Message> {
+    let header = button(
+        row![
+            text(format!("Stashes ({})", app.stashes.len()))
+                .size(12)
+                .width(Fill),
+            text(if app.stashes_visible { "⌄" } else { "›" }).size(12),
+        ]
+        .spacing(6)
+        .align_y(Alignment::Center)
+        .width(Fill),
+    )
+    .on_press(Message::StashesToggled(!app.stashes_visible))
+    .padding([7, 10])
+    .width(Fill)
+    .style(button::text);
+
+    if !app.stashes_visible {
+        return header.into();
+    }
+
+    let mut list = column![].spacing(2).padding([4, 8]);
+    if app.stashes.is_empty() {
+        list = list.push(
+            text("Sin stashes guardados.")
+                .size(11)
+                .style(theme::muted)
+                .width(Fill),
+        );
+    }
+    for stash in &app.stashes {
+        list = list.push(
+            column![
+                text(stash.message.clone())
+                    .size(11)
+                    .width(Fill)
+                    .style(theme::muted),
+                row![
+                    button(text("Aplicar").size(10))
+                        .on_press(Message::StashApply(stash.reference.clone()))
+                        .padding([2, 6])
+                        .style(theme::menu_item),
+                    button(text("Pop").size(10))
+                        .on_press(Message::StashPop(stash.reference.clone()))
+                        .padding([2, 6])
+                        .style(theme::menu_item),
+                    button(text("Descartar").size(10).style(theme::muted))
+                        .on_press(Message::StashDropRequested(stash.reference.clone()))
+                        .padding([2, 6])
+                        .style(theme::menu_item),
+                ]
+                .spacing(4),
+            ]
+            .spacing(2)
+            .padding([3, 2]),
+        );
+    }
+
+    column![
+        header,
+        scrollable(list).height(Length::Fixed(140.0)),
+    ]
+    .width(Fill)
     .into()
 }
 
@@ -200,7 +275,13 @@ fn tab_button(active: Tab, this: Tab, label: String) -> Element<'static, Message
 
 fn main_panel(app: &App) -> Element<'_, Message> {
     match app.tab {
-        Tab::Changes => diff_view::view(app.diff.as_ref(), app.selected.as_ref()),
+        Tab::Changes => {
+            if let Some((path, lines)) = &app.blame {
+                diff_view::blame_view(path, lines)
+            } else {
+                diff_view::view(app.diff.as_ref(), app.selected.as_ref())
+            }
+        }
         Tab::History => history::detail(app),
     }
 }
@@ -268,6 +349,9 @@ fn modals(app: &App) -> Element<'_, Message> {
     }
     if let Some(branch) = &app.pending_delete_branch {
         return delete_branch_modal(branch);
+    }
+    if let Some(reference) = &app.pending_drop_stash {
+        return drop_stash_modal(reference);
     }
     if app.branch_modal {
         return branch_modal(app);
@@ -383,6 +467,35 @@ fn delete_branch_modal(branch: &str) -> Element<'static, Message> {
 
     Stack::with_children(vec![
         modal_scrim(Message::BranchCancelDelete).into(),
+        center(card).width(Fill).height(Fill).into(),
+    ])
+    .into()
+}
+
+/// Confirmación de descarte de stash.
+fn drop_stash_modal(reference: &str) -> Element<'static, Message> {
+    let card = container(
+        column![
+            text("¿Descartar el stash?").size(18),
+            text(format!(
+                "Se eliminará {reference} definitivamente\ny sus cambios se perderán."
+            ))
+            .size(12)
+            .style(theme::muted),
+            row![
+                dialog_button("Cancelar", Message::StashCancelDrop, button::text),
+                dialog_button("Descartar", Message::StashDropConfirmed, button::danger),
+            ]
+            .spacing(10),
+        ]
+        .spacing(12)
+        .max_width(380),
+    )
+    .padding(24)
+    .style(theme::panel);
+
+    Stack::with_children(vec![
+        modal_scrim(Message::StashCancelDrop).into(),
         center(card).width(Fill).height(Fill).into(),
     ])
     .into()

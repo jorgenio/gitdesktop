@@ -21,6 +21,9 @@ pub enum Op {
     Commit,
     MergeCommit,
     RebaseContinue,
+    RevertContinue,
+    CherryContinue,
+    Stash,
 }
 
 /// Resultado de una operación de rama (para el banner y el refresco).
@@ -127,6 +130,26 @@ pub enum Message {
     ClonePickFolder,
     CloneDestPicked(Option<PathBuf>),
     ClonePressed,
+
+    // ——— Stash / revert / cherry-pick / blame (M6) ———
+    StashesToggled(bool),
+    StashesLoaded(Result<Vec<gitdesktop_core::StashEntry>, String>),
+    StashCreatePressed,
+    StashApply(String),
+    StashPop(String),
+    StashDropRequested(String),
+    StashDropConfirmed,
+    StashCancelDrop,
+    StashOpDone(Result<(), String>),
+    RevertPressed { id: String },
+    CherryPressed { id: String },
+    RevertDone(Result<gitdesktop_core::MergeOutcome, String>),
+    CherryDone(Result<gitdesktop_core::MergeOutcome, String>),
+    /// Continúa la operación pausada que corresponda (rebase/revert/cherry).
+    ContinueOpPressed,
+    BlameRequested { path: String },
+    BlameLoaded(Result<(String, Vec<gitdesktop_core::BlameLine>), String>),
+    BlameClosed,
 
     // ——— Red (fetch/pull/push/clone vía CLI git) ———
     /// Inicia una operación de red (botón contextual de la cabecera).

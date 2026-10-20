@@ -5,8 +5,8 @@ use std::time::Duration;
 use std::time::Instant;
 
 use gitdesktop_core::{
-    BranchInfo, CommitSummary, DiffLine, FileEntry, MergeOutcome, NetOpKind, Progress, RepoEntry,
-    RepoStatus, RepoStore, StoreData, TomlStore,
+    BlameLine, BranchInfo, CommitSummary, DiffLine, FileEntry, MergeOutcome, NetOpKind, Progress,
+    RepoEntry, RepoStatus, RepoStore, StashEntry, StoreData, TomlStore,
 };
 use iced::widget::text_editor;
 use time::OffsetDateTime;
@@ -82,6 +82,12 @@ pub struct App {
 
     // Editor de conflictos embebido (fase 2)
     pub conflict_editor: Option<ConflictEditor>,
+
+    // Stash / revert / cherry-pick / blame (M6)
+    pub stashes: Vec<StashEntry>,
+    pub stashes_visible: bool,
+    pub pending_drop_stash: Option<String>,
+    pub blame: Option<(String, Vec<BlameLine>)>,
 
     // Cromo personalizado (barra de título + menús)
     pub open_menu: Option<usize>,
@@ -159,6 +165,10 @@ impl App {
                 clone_url: String::new(),
                 clone_folder: None,
                 conflict_editor: None,
+                stashes: Vec::new(),
+                stashes_visible: false,
+                pending_drop_stash: None,
+                blame: None,
                 open_menu: None,
                 about: false,
                 maximized: false,
@@ -593,6 +603,171 @@ impl App {
                 }
             }
 
+            // ——— Stash ———
+            Message::StashesToggled(open) => {
+                self.stashes_visible = open;
+                if open && self.stashes.is_empty() {
+                    self.load_stashes()
+                } else {
+                    iced::Task::none()
+                }
+            }
+            Message::StashesLoaded(result) => match result {
+                Ok(stashes) => {
+                    self.stashes = stashes;
+                    iced::Task::none()
+                }
+                Err(err) => {
+                    self.error = Some(err);
+                    iced::Task::none()
+                }
+            },
+            Message::StashCreatePressed => {
+                if self.running_op.is_some() {
+                    return iced::Task::none();
+                }
+                self.loading = true;
+                match self.repo_path() {
+                    Some(repo_path) => op_task(repo_path, Op::Stash, |engine| {
+                        engine.stash_push(Some("WIP desde Git-Desktop Jorgenio"))
+                    }),
+                    None => {
+                        self.loading = false;
+                        iced::Task::none()
+                    }
+                }
+            }
+            Message::StashApply(reference) => self.stash_op("apply", move |engine| {
+                let index = stash_index(&reference);
+                engine.stash_apply(index)
+            }),
+            Message::StashPop(reference) => self.stash_op("pop", move |engine| {
+                let index = stash_index(&reference);
+                engine.stash_pop(index)
+            }),
+            Message::StashDropRequested(reference) => {
+                self.pending_drop_stash = Some(reference);
+                iced::Task::none()
+            }
+            Message::StashDropConfirmed => {
+                match (self.repo_path(), self.pending_drop_stash.take()) {
+                    (Some(_repo_path), Some(reference)) => {
+                        self.loading = true;
+                        self.stash_op("drop", move |engine| {
+                            let index = stash_index(&reference);
+                            engine.stash_drop(index)
+                        })
+                    }
+                    _ => iced::Task::none(),
+                }
+            }
+            Message::StashCancelDrop => {
+                self.pending_drop_stash = None;
+                iced::Task::none()
+            }
+            Message::StashOpDone(result) => {
+                self.loading = false;
+                match result {
+                    Ok(()) => {
+                        self.error = None;
+                        self.notice = Some("Stash aplicado.".into());
+                        self.last_refresh = None;
+                        let refresh = self.refresh();
+                        match self.repo_path() {
+                            Some(path) => {
+                                iced::Task::batch([refresh, stashes_task(path)])
+                            }
+                            None => refresh,
+                        }
+                    }
+                    Err(err) => {
+                        self.error = Some(err);
+                        iced::Task::none()
+                    }
+                }
+            }
+
+            // ——— Revert / cherry-pick ———
+            Message::RevertPressed { id } => {
+                self.loading = true;
+                match self.repo_path() {
+                    Some(repo_path) => iced::Task::perform(
+                        async move {
+                            let engine = gitdesktop_core::open(&repo_path)
+                                .map_err(|e| e.to_string())?;
+                            engine.revert_commit(&id).map_err(|e| e.to_string())
+                        },
+                        Message::RevertDone,
+                    ),
+                    None => {
+                        self.loading = false;
+                        iced::Task::none()
+                    }
+                }
+            }
+            Message::CherryPressed { id } => {
+                self.loading = true;
+                match self.repo_path() {
+                    Some(repo_path) => iced::Task::perform(
+                        async move {
+                            let engine = gitdesktop_core::open(&repo_path)
+                                .map_err(|e| e.to_string())?;
+                            engine.cherry_pick(&id).map_err(|e| e.to_string())
+                        },
+                        Message::CherryDone,
+                    ),
+                    None => {
+                        self.loading = false;
+                        iced::Task::none()
+                    }
+                }
+            }
+            Message::RevertDone(result) => self.on_undo_done("Revert", result),
+            Message::CherryDone(result) => self.on_undo_done("Cherry-pick", result),
+            Message::ContinueOpPressed => {
+                let Some(open) = self.repo.as_ref() else {
+                    return iced::Task::none();
+                };
+                let repo_path = open.entry.path.clone();
+                self.loading = true;
+                if open.status.reverting {
+                    op_task(repo_path, Op::RevertContinue, |engine| {
+                        engine.continue_revert()
+                    })
+                } else if open.status.cherry_picking {
+                    op_task(repo_path, Op::CherryContinue, |engine| {
+                        engine.continue_cherry_pick()
+                    })
+                } else {
+                    op_task(repo_path, Op::RebaseContinue, |engine| {
+                        engine.continue_rebase()
+                    })
+                }
+            }
+
+            // ——— Blame ———
+            Message::BlameRequested { path } => {
+                self.blame = None;
+                match self.repo_path() {
+                    Some(repo_path) => blame_task(repo_path, path),
+                    None => iced::Task::none(),
+                }
+            }
+            Message::BlameLoaded(result) => match result {
+                Ok((path, lines)) => {
+                    self.blame = Some((path, lines));
+                    iced::Task::none()
+                }
+                Err(err) => {
+                    self.error = Some(err);
+                    iced::Task::none()
+                }
+            },
+            Message::BlameClosed => {
+                self.blame = None;
+                iced::Task::none()
+            }
+
             Message::ClearError => {
                 self.error = None;
                 iced::Task::none()
@@ -842,6 +1017,9 @@ impl App {
             self.branches.clear();
             self.notice = None;
             self.conflict_editor = None;
+            self.stashes.clear();
+            self.stashes_visible = false;
+            self.blame = None;
         }
 
         self.data.touch_repo(&path, OffsetDateTime::now_utc());
@@ -881,7 +1059,14 @@ impl App {
                     self.diff = None;
                 }
                 self.last_refresh = None;
-                self.refresh()
+                let refresh = self.refresh();
+                match op {
+                    Op::Stash => match self.repo_path() {
+                        Some(path) => iced::Task::batch([refresh, stashes_task(path)]),
+                        None => refresh,
+                    },
+                    _ => refresh,
+                }
             }
             Err(err) => {
                 self.error = Some(err);
@@ -1111,6 +1296,67 @@ impl App {
         })
     }
 
+    /// Operación de stash genérica (apply/pop/drop) con recarga posterior.
+    fn stash_op<F>(&mut self, label: &str, f: F) -> iced::Task<Message>
+    where
+        F: FnOnce(&dyn gitdesktop_core::GitEngine) -> gitdesktop_core::Result<()>
+            + Send
+            + 'static,
+    {
+        let _ = label;
+        self.loading = true;
+        match self.repo_path() {
+            Some(repo_path) => iced::Task::perform(
+                async move {
+                    let engine = gitdesktop_core::open(&repo_path)
+                        .map_err(|err| err.to_string())?;
+                    f(engine.as_ref()).map_err(|err| err.to_string())
+                },
+                Message::StashOpDone,
+            ),
+            None => {
+                self.loading = false;
+                iced::Task::none()
+            }
+        }
+    }
+
+    /// Recarga la lista de stashes.
+    fn load_stashes(&mut self) -> iced::Task<Message> {
+        match self.repo_path() {
+            Some(path) => stashes_task(path),
+            None => iced::Task::none(),
+        }
+    }
+
+    /// Resultado común de revert/cherry-pick (con o sin conflictos).
+    fn on_undo_done(
+        &mut self,
+        label: &str,
+        result: Result<MergeOutcome, String>,
+    ) -> iced::Task<Message> {
+        self.loading = false;
+        match result {
+            Ok(MergeOutcome::Conflicts(_)) => {
+                self.error = Some(format!(
+                    "{label} dejó conflictos. Edítalos, márcalos como resueltos                      y pulsa «Continuar»."
+                ));
+                self.last_refresh = None;
+                self.refresh()
+            }
+            Ok(_) => {
+                self.error = None;
+                self.notice = Some(format!("{label} aplicado correctamente."));
+                self.last_refresh = None;
+                self.refresh()
+            }
+            Err(err) => {
+                self.error = Some(err);
+                iced::Task::none()
+            }
+        }
+    }
+
     /// Alterna claro/oscuro y persiste la preferencia.
     fn toggle_theme(&mut self) -> iced::Task<Message> {
         self.data.ui.theme = match self.data.ui.theme.as_str() {
@@ -1335,6 +1581,38 @@ fn commit_diff_task(path: PathBuf, commit_id: String, file: String) -> iced::Tas
         },
         Message::CommitDiffLoaded,
     )
+}
+
+/// Recarga la lista de stashes.
+fn stashes_task(path: PathBuf) -> iced::Task<Message> {
+    iced::Task::perform(
+        async move {
+            let engine = gitdesktop_core::open(&path).map_err(|err| err.to_string())?;
+            engine.stashes().map_err(|err| err.to_string())
+        },
+        Message::StashesLoaded,
+    )
+}
+
+/// Calcula el blame de un archivo (respecto a HEAD).
+fn blame_task(path: PathBuf, file: String) -> iced::Task<Message> {
+    iced::Task::perform(
+        async move {
+            let engine = gitdesktop_core::open(&path).map_err(|err| err.to_string())?;
+            let lines = engine.blame(&file).map_err(|err| err.to_string())?;
+            Ok((file, lines))
+        },
+        Message::BlameLoaded,
+    )
+}
+
+/// Índice numérico de una referencia `stash@{n}`.
+fn stash_index(reference: &str) -> usize {
+    reference
+        .split("stash@{")
+        .nth(1)
+        .and_then(|rest| rest.trim_end_matches('}').parse().ok())
+        .unwrap_or(0)
 }
 
 /// Diálogo nativo de selección de carpeta (rfd asíncrono).

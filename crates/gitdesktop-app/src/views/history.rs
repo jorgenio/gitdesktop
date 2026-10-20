@@ -102,10 +102,29 @@ pub fn detail(app: &App) -> Element<'_, Message> {
 
     let header = container(
         column![
-            text(commit.summary.clone()).size(15),
-            text(format!("{} · {} · {}", commit.author, date, commit.short_id))
-                .size(11)
-                .style(theme::muted),
+            row![
+                column![
+                    text(commit.summary.clone()).size(15),
+                    text(format!(
+                        "{} · {} · {}",
+                        commit.author, date, commit.short_id
+                    ))
+                    .size(11)
+                    .style(theme::muted),
+                ]
+                .spacing(3)
+                .width(Fill),
+                button(text("Revert").size(11).style(theme::muted))
+                    .on_press(Message::RevertPressed { id: commit.id.clone() })
+                    .padding([4, 8])
+                    .style(theme::menu_item),
+                button(text("Cherry-pick").size(11).style(theme::muted))
+                    .on_press(Message::CherryPressed { id: commit.id.clone() })
+                    .padding([4, 8])
+                    .style(theme::menu_item),
+            ]
+            .spacing(8)
+            .align_y(iced::Alignment::Center),
         ]
         .spacing(3),
     )

@@ -7,7 +7,10 @@
 use std::path::{Path, PathBuf};
 
 use crate::error::Result;
-use crate::models::{BranchInfo, CommitSummary, DiffLine, FileEntry, MergeOutcome, RepoStatus};
+use crate::models::{
+    BlameLine, BranchInfo, CommitSummary, DiffLine, FileEntry, MergeOutcome, RepoStatus,
+    StashEntry,
+};
 use crate::native::NativeEngine;
 
 /// Motor de operaciones Git para un repositorio abierto.
@@ -89,6 +92,38 @@ pub trait GitEngine: Send {
 
     /// Abandona el rebase (`git rebase --abort`).
     fn abort_rebase(&self) -> Result<()>;
+
+    // ——— Stash / revert / cherry-pick / blame (M6) ————————————————————
+
+    /// Lista los stashes, del más reciente al más viejo.
+    fn stashes(&self) -> Result<Vec<StashEntry>>;
+
+    /// Guarda los cambios locales en un stash (`git stash push`).
+    fn stash_push(&self, message: Option<&str>) -> Result<()>;
+
+    /// Aplica un stash sin eliminarlo (`git stash apply`).
+    fn stash_apply(&self, index: usize) -> Result<()>;
+
+    /// Aplica un stash y lo elimina (`git stash pop`).
+    fn stash_pop(&self, index: usize) -> Result<()>;
+
+    /// Elimina un stash (`git stash drop`).
+    fn stash_drop(&self, index: usize) -> Result<()>;
+
+    /// Revierte un commit (`git revert --no-edit`); puede dejar conflictos.
+    fn revert_commit(&self, id: &str) -> Result<MergeOutcome>;
+
+    /// Continúa un revert pausado por conflictos.
+    fn continue_revert(&self) -> Result<()>;
+
+    /// Aplica un commit ajeno (`git cherry-pick`); puede dejar conflictos.
+    fn cherry_pick(&self, id: &str) -> Result<MergeOutcome>;
+
+    /// Continúa un cherry-pick pausado por conflictos.
+    fn continue_cherry_pick(&self) -> Result<()>;
+
+    /// `git blame` línea a línea de un archivo (respecto a HEAD).
+    fn blame(&self, path: &str) -> Result<Vec<BlameLine>>;
 }
 
 /// Abre un repositorio existente con el motor nativo (libgit2).

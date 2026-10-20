@@ -151,6 +151,8 @@ fn container_row<'a>(
 fn commit_panel<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
     let merging = open.status.merging;
     let rebasing = open.status.rebasing;
+    let reverting = open.status.reverting;
+    let cherry_picking = open.status.cherry_picking;
     let can_commit = open.status.staged_count() > 0
         && !app.summary.trim().is_empty()
         && !merging
@@ -181,6 +183,15 @@ fn commit_panel<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
         ]
         .spacing(8)
         .into()
+    } else if reverting || cherry_picking {
+        row![dialog_button_inline(
+            "Continuar",
+            Message::ContinueOpPressed,
+            button::primary,
+            open.status.staged_count() > 0,
+        )]
+        .spacing(8)
+        .into()
     } else {
         column![].into()
     };
@@ -203,6 +214,24 @@ fn commit_panel<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
             .size(12)
             .height(Length::Fixed(84.0)),
         merge_row,
+        row![
+            button(
+                text("Guardar en stash")
+                    .size(11)
+                    .align_x(Alignment::Center)
+                    .width(Fill),
+            )
+            .on_press_maybe(
+                if open.status.entries.is_empty() || merging || rebasing {
+                    None
+                } else {
+                    Some(Message::StashCreatePressed)
+                },
+            )
+            .padding([7, 0])
+            .width(Fill)
+            .style(button::text),
+        ],
         button(
             text(commit_button_label)
                 .size(13)

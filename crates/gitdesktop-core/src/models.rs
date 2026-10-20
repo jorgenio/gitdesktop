@@ -64,6 +64,10 @@ pub struct RepoStatus {
     pub merging: bool,
     /// Hay un rebase en curso (existe rebase-merge/rebase-apply).
     pub rebasing: bool,
+    /// Hay un revert en curso (existe REVERT_HEAD).
+    pub reverting: bool,
+    /// Hay un cherry-pick en curso (existe CHERRY_PICK_HEAD).
+    pub cherry_picking: bool,
     pub entries: Vec<FileEntry>,
 }
 
@@ -112,6 +116,27 @@ pub struct CommitSummary {
     pub author: String,
     /// Fecha del commit en UTC (la zona horaria local llega en fase 2).
     pub time: OffsetDateTime,
+}
+
+/// Un stash guardado (`stash@{n}`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StashEntry {
+    /// Referencia tal cual (`stash@{0}`) para aplicar/descartar.
+    pub reference: String,
+    /// Mensaje del stash (incluye rama y sha que genera git).
+    pub message: String,
+    /// Fecha legible reportada por git.
+    pub date: String,
+}
+
+/// Una línea de `git blame`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlameLine {
+    /// SHA abreviado del commit que tocó la línea.
+    pub short_commit: String,
+    pub author: String,
+    /// Contenido de la línea.
+    pub content: String,
 }
 
 /// Resultado de una operación de fusión (merge).
