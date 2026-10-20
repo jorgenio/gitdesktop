@@ -333,6 +333,33 @@ es reutilizable después para CLI (fase 2) sin cambios en la UI.
 
 ---
 
+## 12bis. Estado real del proyecto (actualizado al completar fase 2)
+
+| Hito original | Estado |
+|---|---|
+| M0 esqueleto + CI | ✅ v0.1.1 |
+| M1 changes/diffs/commits | ✅ |
+| M2 historial + refresco en vivo (notify) | ✅ |
+| M3 red: fetch/pull/push/publish + credenciales del sistema | ✅ |
+| M4 ramas + merge + clone | ✅ |
+| M5 empaquetado .deb/AppImage/MSI + releases automáticos | ✅ |
+| Fase 2: watcher notify | ✅ |
+| Fase 2: temas claro/oscuro | ✅ |
+| Fase 2: editor de conflictos embebido (jorgenio-core, submódulo) | ✅ |
+| Fase 2: grafo de commits | ✅ |
+| Fase 2: rebase (pausa/continuar/abortar) | ✅ |
+
+### Hitos propuestos (restantes)
+
+| Hito | Contenido | Esfuerzo aprox. |
+|---|---|---|
+| **M6 — Operaciones Git restantes** | Stash (crear/ver/pop/drop — sección "Stashed Changes" del diseño original), revert de commits, cherry-pick, blame de archivo | 2 semanas |
+| **M7 — Integración GitHub** | OAuth device flow (login), listado y creación de Pull Requests, checks de CI por rama/PR, notificaciones | 3-4 semanas |
+| **M8 — Pulido de producto** | Auto-actualizador (chequeo de releases), preferencias UI (editor externo, intervalo de auto-fetch), restaurar tamaño/posición de ventana, i18n es/en | 1-2 semanas |
+| **M9 — Distribución extendida** | winget (Windows), Flatpak/Snap (Linux), firma GPG de los releases | 1 semana |
+
+---
+
 ## 13. Próximos pasos inmediatos
 
 1. Crear el workspace y el esqueleto de `gitdesktop-core`/`gitdesktop-app` (M0), incluida la capa de persistencia `store.rs` → `gitdesktop.toml`
