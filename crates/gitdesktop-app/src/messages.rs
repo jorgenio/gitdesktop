@@ -151,6 +151,8 @@ pub enum Message {
     BlameRequested { path: String },
     BlameLoaded(Result<(String, Vec<gitdesktop_core::BlameLine>), String>),
     BlameClosed,
+    /// Abre/cierra el selector de repositorios (cabecera).
+    RepoMenuToggled(bool),
 
     // ——— GitHub: PRs (M7) ———
     PrsLoaded(Result<Vec<crate::github::PullRequest>, String>),

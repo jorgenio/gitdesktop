@@ -77,6 +77,7 @@ pub struct App {
 
     // Clone (M4)
     pub clone_modal: bool,
+    pub repo_menu_open: bool,
     pub clone_url: String,
     pub clone_folder: Option<PathBuf>,
 
@@ -170,6 +171,7 @@ impl App {
                 merge_modal: false,
                 merge_target: None,
                 clone_modal: false,
+                repo_menu_open: false,
                 clone_url: String::new(),
                 clone_folder: None,
                 conflict_editor: None,
@@ -532,6 +534,10 @@ impl App {
                 }
             },
 
+            Message::RepoMenuToggled(open) => {
+                self.repo_menu_open = open;
+                iced::Task::none()
+            }
             Message::EditConflictPressed { path } => {
                 let Some(open) = self.repo.as_ref() else {
                     return iced::Task::none();

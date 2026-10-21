@@ -8,7 +8,7 @@ pub mod prs;
 pub mod titlebar;
 
 use iced::widget::{button, canvas, center, column, container, mouse_area, pick_list, row, rule, scrollable, space, text, text_input, Stack};
-use iced::{Alignment, Color, Element, Fill, Length, Theme};
+use iced::{Alignment, Color, Element, Fill, Length, Padding, Theme};
 
 use crate::messages::{Message, Tab};
 use crate::widgets::conflict_editor::{EditAction, EditorCanvas};
@@ -23,6 +23,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
         error_banner(app),
         Stack::with_children(vec![
             body(app),
+            repo_menu_overlay(app),
             titlebar::menu_overlay(app),
             modals(app),
         ])
@@ -72,26 +73,7 @@ fn header<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
 
     container(
         row![
-            section(
-                column![
-                    text("Repositorio actual").size(10).style(theme::muted),
-                    text(open.entry.name.clone()).size(15),
-                ]
-                .spacing(2)
-                .into(),
-            ),
-            vertical_separator(),
-            section(
-                column![
-                    text("Abrir otro repositorio…").size(10).style(theme::muted),
-                    button(text("Abrir…").size(13))
-                        .on_press(Message::OpenFolderDialog)
-                        .padding([0, 0])
-                        .style(theme::ghost),
-                ]
-                .spacing(2)
-                .into(),
-            ),
+            section(repo_button(app, open)),
             vertical_separator(),
             section(branch_button(open)),
             space::horizontal(),
@@ -103,6 +85,28 @@ fn header<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
     )
     .width(Fill)
     .style(theme::header_bar)
+    .into()
+}
+
+/// Selector de repositorio con ▾ (como «Current Repository» de GHD).
+fn repo_button<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
+    button(
+        column![
+            text("Repositorio actual").size(10).style(theme::muted),
+            row![
+                text(open.entry.name.clone()).size(15),
+                text(if app.repo_menu_open { "▴" } else { "▾" })
+                    .size(11)
+                    .style(theme::muted),
+            ]
+            .spacing(6)
+            .align_y(Alignment::Center),
+        ]
+        .spacing(2),
+    )
+    .on_press(Message::RepoMenuToggled(!app.repo_menu_open))
+    .padding([0, 0])
+    .style(theme::ghost)
     .into()
 }
 
@@ -153,20 +157,26 @@ fn sync_button<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
 
     let actionable = action.is_some() && !busy;
 
-    button(
-        column![
-            text(label).size(14),
-            text(subtitle).size(10).style(theme::muted),
-        ]
-        .spacing(2),
-    )
-    .on_press_maybe(action.filter(|_| actionable).map(Message::NetStart))
-    .padding([6, 14])
-    .style(if actionable {
-        button::primary
-    } else {
-        button::text
-    })
+    column![
+        button(
+            text(label)
+                .size(13)
+                .align_x(Alignment::Center)
+                .width(Fill),
+        )
+        .on_press_maybe(action.filter(|_| actionable).map(Message::NetStart))
+        .padding([7, 18])
+        .width(Fill)
+        .style(if actionable {
+            button::primary
+        } else {
+            button::text
+        }),
+        text(subtitle).size(10).style(theme::muted),
+    ]
+    .spacing(3)
+    .width(Length::Fixed(230.0))
+    .align_x(Alignment::Center)
     .into()
 }
 
@@ -958,6 +968,72 @@ fn branch_label(open: &OpenRepo) -> String {
     } else {
         open.status.branch.clone()
     }
+}
+
+/// Menú de repositorios recientes (bajo la sección de cabecera).
+fn repo_menu_overlay(app: &App) -> Element<'_, Message> {
+    if !app.repo_menu_open {
+        return column![].into();
+    }
+
+    let scrim = mouse_area(
+        container(space::Space::new().width(Fill).height(Fill))
+            .width(Fill)
+            .height(Fill)
+            .style(theme::scrim),
+    )
+    .on_press(Message::RepoMenuToggled(false));
+
+    let mut panel = column![].width(Length::Fixed(320.0)).padding(6);
+
+    for entry in app.data.repos.iter().take(10) {
+        let is_current = app
+            .repo
+            .as_ref()
+            .map(|open| open.entry.id == entry.id)
+            .unwrap_or(false);
+
+        panel = panel.push(
+            button(
+                row![
+                    text(if is_current {
+                        format!("✓ {}", entry.name)
+                    } else {
+                        entry.name.clone()
+                    })
+                    .size(13)
+                    .width(Fill),
+                ],
+            )
+            .on_press(Message::OpenRecent(entry.id.clone()))
+            .padding([7, 10])
+            .width(Fill)
+            .style(theme::menu_item),
+        );
+    }
+
+    panel = panel.push(
+        button(text("Abrir carpeta…").size(13))
+            .on_press(Message::OpenFolderDialog)
+            .padding([7, 10])
+            .width(Fill)
+            .style(theme::menu_item),
+    );
+
+    let dropdown = container(panel)
+        .padding(Padding {
+            top: 2.0,
+            right: 0.0,
+            bottom: 0.0,
+            left: 6.0,
+        })
+        .width(Fill)
+        .height(Fill)
+        .align_x(Alignment::Start)
+        .align_y(Alignment::Start)
+        .style(theme::dropdown);
+
+    Stack::with_children(vec![scrim.into(), dropdown.into()]).into()
 }
 
 /// Texto humano para "última sincronización hace X".
