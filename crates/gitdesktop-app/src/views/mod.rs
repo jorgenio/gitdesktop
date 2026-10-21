@@ -168,9 +168,9 @@ fn sync_button<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
         .padding([7, 18])
         .width(Fill)
         .style(if actionable {
-            button::primary
+            theme::primary
         } else {
-            button::text
+            theme::text_btn
         }),
         text(subtitle).size(10).style(theme::muted),
     ]
@@ -255,7 +255,7 @@ fn stash_section<'a>(app: &'a App) -> Element<'a, Message> {
     .on_press(Message::StashesToggled(!app.stashes_visible))
     .padding([7, 10])
     .width(Fill)
-    .style(button::text);
+    .style(theme::text_btn);
 
     if !app.stashes_visible {
         return header.into();
@@ -378,7 +378,7 @@ fn welcome(app: &App) -> Element<'_, Message> {
             .on_press(Message::OpenRecent(entry.id.clone()))
             .padding([8, 12])
             .width(Fill)
-            .style(button::text),
+            .style(theme::text_btn),
         );
     }
 
@@ -396,7 +396,7 @@ fn welcome(app: &App) -> Element<'_, Message> {
         .on_press(Message::OpenFolderDialog)
         .padding([10, 18])
         .width(Length::Fixed(260.0))
-        .style(button::primary),
+        .style(theme::primary),
         recents,
     ]
     .spacing(16)
@@ -472,7 +472,7 @@ fn about_modal() -> Element<'static, Message> {
             .on_press(Message::AboutToggled(false))
             .padding([8, 0])
             .width(Fill)
-            .style(button::primary),
+            .style(theme::primary),
         ]
         .spacing(12)
         .max_width(340),
@@ -499,8 +499,8 @@ fn discard_modal(path: &str) -> Element<'static, Message> {
             .size(12)
             .style(theme::muted),
             row![
-                dialog_button("Cancelar", Message::CancelDiscard, button::text),
-                dialog_button("Descartar", Message::ConfirmDiscard, button::danger),
+                dialog_button("Cancelar", Message::CancelDiscard, theme::text_btn),
+                dialog_button("Descartar", Message::ConfirmDiscard, theme::danger_btn),
             ]
             .spacing(10),
         ]
@@ -528,8 +528,8 @@ fn delete_branch_modal(branch: &str) -> Element<'static, Message> {
             .size(12)
             .style(theme::muted),
             row![
-                dialog_button("Cancelar", Message::BranchCancelDelete, button::text),
-                dialog_button("Eliminar", Message::BranchDeleteConfirmed, button::danger),
+                dialog_button("Cancelar", Message::BranchCancelDelete, theme::text_btn),
+                dialog_button("Eliminar", Message::BranchDeleteConfirmed, theme::danger_btn),
             ]
             .spacing(10),
         ]
@@ -557,8 +557,8 @@ fn drop_stash_modal(reference: &str) -> Element<'static, Message> {
             .size(12)
             .style(theme::muted),
             row![
-                dialog_button("Cancelar", Message::StashCancelDrop, button::text),
-                dialog_button("Descartar", Message::StashDropConfirmed, button::danger),
+                dialog_button("Cancelar", Message::StashCancelDrop, theme::text_btn),
+                dialog_button("Descartar", Message::StashDropConfirmed, theme::danger_btn),
             ]
             .spacing(10),
         ]
@@ -632,12 +632,12 @@ fn branch_modal(app: &App) -> Element<'_, Message> {
                     None
                 })
                 .padding([8, 12])
-                .style(button::primary),
+                .style(theme::primary),
             ]
             .spacing(8),
             rule::horizontal(1),
             scrollable(list).height(Length::Fixed(240.0)),
-            dialog_button("Cerrar", Message::BranchModalToggled(false), button::text),
+            dialog_button("Cerrar", Message::BranchModalToggled(false), theme::text_btn),
         ]
         .spacing(12)
         .max_width(420),
@@ -693,8 +693,8 @@ fn merge_modal(app: &App) -> Element<'_, Message> {
             )
             .width(Fill),
             row![
-                dialog_button("Cancelar", Message::MergeModalToggled(false), button::text),
-                dialog_button(&verb, on_go, button::primary),
+                dialog_button("Cancelar", Message::MergeModalToggled(false), theme::text_btn),
+                dialog_button(&verb, on_go, theme::primary),
             ]
             .spacing(10),
         ]
@@ -725,12 +725,12 @@ fn rebase_paused_modal(_app: &App) -> Element<'_, Message> {
                 dialog_button(
                     "Abortar rebase",
                     Message::RebaseAbortPressed,
-                    button::danger,
+                    theme::danger_btn,
                 ),
                 dialog_button(
                     "Continuar rebase",
                     Message::RebaseContinuePressed,
-                    button::primary,
+                    theme::primary,
                 ),
             ]
             .spacing(10),
@@ -787,14 +787,14 @@ fn clone_modal(app: &App) -> Element<'_, Message> {
             })
             .padding([8, 0])
             .width(Fill)
-            .style(button::text),
+            .style(theme::text_btn),
             if progress.is_empty() {
                 Element::<Message>::from(column![])
             } else {
                 text(progress).size(11).style(theme::muted).into()
             },
             row![
-                dialog_button("Cancelar", Message::CloneModalToggled(false), button::text),
+                dialog_button("Cancelar", Message::CloneModalToggled(false), theme::text_btn),
                 button(
                     text("Clonar")
                         .size(13)
@@ -808,7 +808,7 @@ fn clone_modal(app: &App) -> Element<'_, Message> {
                 })
                 .padding([8, 0])
                 .width(Fill)
-                .style(button::primary),
+                .style(theme::primary),
             ]
             .spacing(10),
         ]
@@ -889,17 +889,17 @@ fn editor_modal(app: &App) -> Element<'_, Message> {
                 dialog_button(
                     "Cancelar (Esc)",
                     Message::EditorMsg(EditAction::Close),
-                    button::text,
+                    theme::text_btn,
                 ),
                 dialog_button(
                     "Guardar",
                     Message::EditorMsg(EditAction::Save),
-                    button::text,
+                    theme::text_btn,
                 ),
                 dialog_button(
                     "Guardar y marcar resuelto (Ctrl+S)",
                     Message::EditorMsg(EditAction::SaveAndResolve),
-                    button::primary,
+                    theme::primary,
                 ),
             ]
             .spacing(8),
@@ -931,7 +931,7 @@ fn notice_banner(app: &App) -> Element<'_, Message> {
             button(text("X").size(11))
                 .on_press(Message::ClearNotice)
                 .padding([2, 8])
-                .style(button::text),
+                .style(theme::text_btn),
         ]
         .spacing(8)
         .align_y(Alignment::Center),
@@ -953,7 +953,7 @@ fn error_banner(app: &App) -> Element<'_, Message> {
             button(text("X").size(11))
                 .on_press(Message::ClearError)
                 .padding([2, 8])
-                .style(button::text),
+                .style(theme::text_btn),
         ]
         .spacing(8)
         .align_y(Alignment::Center),

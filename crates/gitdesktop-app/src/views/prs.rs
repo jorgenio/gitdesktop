@@ -33,7 +33,7 @@ pub fn list(app: &App) -> Element<'_, Message> {
     .on_press(Message::CreatePrModalToggled(true))
     .padding([7, 0])
     .width(Fill)
-    .style(button::primary);
+    .style(theme::primary);
 
     let mut list = column![].spacing(2).padding([6, 6]);
 
@@ -188,7 +188,7 @@ pub fn detail(app: &App) -> Element<'_, Message> {
             dialog_button(
                 "Cambiar a esta rama",
                 Message::CheckoutPr { number: pr.number },
-                button::primary,
+                theme::primary,
                 pr.head != current_branch,
             ),
         ]
@@ -248,13 +248,13 @@ pub fn create_modal(app: &App) -> Element<'_, Message> {
                 dialog_button(
                     "Cancelar",
                     Message::CreatePrModalToggled(false),
-                    button::text,
+                    theme::text_btn,
                     true,
                 ),
                 dialog_button(
                     "Crear PR",
                     Message::CreatePrPressed,
-                    button::primary,
+                    theme::primary,
                     can_create,
                 ),
             ]

@@ -151,8 +151,8 @@ fn commit_panel<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
 
     let merge_row: Element<'a, Message> = if merging {
         row![
-            dialog_button_inline("Confirmar merge", Message::MergeCommitPressed, button::primary, open.status.staged_count() > 0),
-            dialog_button_inline("Abortar", Message::MergeAborted, button::danger, true),
+            dialog_button_inline("Confirmar merge", Message::MergeCommitPressed, theme::primary, open.status.staged_count() > 0),
+            dialog_button_inline("Abortar", Message::MergeAborted, theme::danger_btn, true),
         ]
         .spacing(8)
         .into()
@@ -161,10 +161,10 @@ fn commit_panel<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
             dialog_button_inline(
                 "Continuar rebase",
                 Message::RebaseContinuePressed,
-                button::primary,
+                theme::primary,
                 open.status.staged_count() > 0,
             ),
-            dialog_button_inline("Abortar rebase", Message::RebaseAbortPressed, button::danger, true),
+            dialog_button_inline("Abortar rebase", Message::RebaseAbortPressed, theme::danger_btn, true),
         ]
         .spacing(8)
         .into()
@@ -172,7 +172,7 @@ fn commit_panel<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
         row![dialog_button_inline(
             "Continuar",
             Message::ContinueOpPressed,
-            button::primary,
+            theme::primary,
             open.status.staged_count() > 0,
         )]
         .spacing(8)
@@ -221,7 +221,7 @@ fn commit_panel<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
             )
             .padding([7, 0])
             .width(Fill)
-            .style(button::text),
+            .style(theme::text_btn),
         ],
         button(
             text(commit_button_label)
@@ -236,7 +236,7 @@ fn commit_panel<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
         })
         .padding([10, 0])
         .width(Fill)
-        .style(button::primary),
+        .style(theme::primary),
     ]
     .spacing(8)
     .padding([10, 10])

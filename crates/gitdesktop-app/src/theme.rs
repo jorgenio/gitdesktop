@@ -142,7 +142,7 @@ pub fn input(theme: &Theme, status: iced::widget::text_input::Status) -> iced::w
         border: Border {
             color: border_color,
             width: 1.0,
-            radius: 6.0.into(),
+            radius: 3.0.into(),
         },
         icon: c.muted,
         value: c.text,
@@ -159,7 +159,7 @@ pub fn input_box(theme: &Theme) -> container::Style {
         border: Border {
             color: c.separator,
             width: 1.0,
-            radius: 6.0.into(),
+            radius: 3.0.into(),
         },
         ..container::Style::default()
     }
@@ -241,7 +241,7 @@ pub fn card(theme: &Theme) -> container::Style {
     let c = colors(theme);
     container::Style {
         background: Some(c.panel.into()),
-        border: Border::default().rounded(8),
+        border: Border::default().rounded(6),
         shadow: Shadow {
             color: c.shadow,
             offset: iced::Vector::new(0.0, 6.0),
@@ -256,7 +256,7 @@ pub fn dropdown(theme: &Theme) -> container::Style {
     let c = colors(theme);
     container::Style {
         background: Some(c.panel.into()),
-        border: Border::default().rounded(8),
+        border: Border::default().rounded(6),
         shadow: Shadow {
             color: c.shadow,
             offset: iced::Vector::new(0.0, 8.0),
@@ -300,6 +300,65 @@ pub fn deleted(theme: &Theme) -> text::Style {
 
 // —————————————————————————————— Botones ————————————————————————————————
 
+/// Aclara/oscura un color (para hovers de botones sólidos).
+fn shade(color: Color, factor: f32) -> Color {
+    Color {
+        r: (color.r * factor).min(1.0),
+        g: (color.g * factor).min(1.0),
+        b: (color.b * factor).min(1.0),
+        a: color.a,
+    }
+}
+
+/// Botón primario (commit, fetch, crear…): plano, radio 3, hover oscuro.
+pub fn primary(theme: &Theme, status: button::Status) -> button::Style {
+    let c = colors(theme);
+    let background = match status {
+        button::Status::Hovered => shade(c.accent, 0.82),
+        button::Status::Pressed => shade(c.accent, 0.7),
+        button::Status::Disabled => Color { a: 0.35, ..c.accent },
+        _ => c.accent,
+    };
+    button::Style {
+        background: Some(background.into()),
+        text_color: Color::WHITE,
+        border: Border::default().rounded(3),
+        ..button::Style::default()
+    }
+}
+
+/// Botón de acción destructiva (descartar, eliminar, abortar).
+pub fn danger_btn(theme: &Theme, status: button::Status) -> button::Style {
+    let c = colors(theme);
+    let background = match status {
+        button::Status::Hovered => shade(c.danger, 0.82),
+        button::Status::Pressed => shade(c.danger, 0.7),
+        button::Status::Disabled => Color { a: 0.35, ..c.danger },
+        _ => c.danger,
+    };
+    button::Style {
+        background: Some(background.into()),
+        text_color: Color::WHITE,
+        border: Border::default().rounded(3),
+        ..button::Style::default()
+    }
+}
+
+/// Botón de texto (Cancelar, Cerrar…): transparente con hover sutil.
+pub fn text_btn(theme: &Theme, status: button::Status) -> button::Style {
+    let c = colors(theme);
+    let background = match status {
+        button::Status::Hovered | button::Status::Pressed => c.panel_soft,
+        _ => Color::TRANSPARENT,
+    };
+    button::Style {
+        background: Some(background.into()),
+        text_color: c.muted,
+        border: Border::default().rounded(3),
+        ..button::Style::default()
+    }
+}
+
 /// Botón de la barra de menús (Archivo, Editar…): hover sutil.
 pub fn menu_button(open: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
     move |theme: &Theme, status: button::Status| {
@@ -312,7 +371,7 @@ pub fn menu_button(open: bool) -> impl Fn(&Theme, button::Status) -> button::Sty
         button::Style {
             background: Some(background.into()),
             text_color: c.text,
-            border: Border::default().rounded(6),
+            border: Border::default().rounded(3),
             ..button::Style::default()
         }
     }
@@ -328,7 +387,7 @@ pub fn ghost(theme: &Theme, status: button::Status) -> button::Style {
     button::Style {
         background: Some(background.into()),
         text_color: c.muted,
-        border: Border::default().rounded(6),
+        border: Border::default().rounded(3),
         ..button::Style::default()
     }
 }
@@ -373,7 +432,7 @@ pub fn menu_item(theme: &Theme, status: button::Status) -> button::Style {
     button::Style {
         background: Some(background.into()),
         text_color: c.text,
-        border: Border::default().rounded(6),
+        border: Border::default().rounded(3),
         ..button::Style::default()
     }
 }
@@ -383,7 +442,7 @@ pub fn menu_item_disabled(theme: &Theme, _status: button::Status) -> button::Sty
     button::Style {
         background: Some(Color::TRANSPARENT.into()),
         text_color: colors(theme).muted,
-        border: Border::default().rounded(6),
+        border: Border::default().rounded(3),
         ..button::Style::default()
     }
 }
