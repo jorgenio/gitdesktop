@@ -77,7 +77,7 @@ fn header<'a>(app: &'a App, open: &'a OpenRepo) -> Element<'a, Message> {
             vertical_separator(),
             section(branch_button(open)),
             space::horizontal(),
-            section(sync_button(app, open)),
+            container(sync_button(app, open)).padding([0, 12]),
         ]
         .height(Length::Fixed(56.0))
         .align_y(Alignment::Center)
@@ -337,15 +337,21 @@ fn tab_button(active: Tab, this: Tab, label: String) -> Element<'static, Message
     .into()
 }
 
+fn placeholder_vacio() -> Element<'static, Message> {
+    column![].into()
+}
+
 fn main_panel(app: &App) -> Element<'_, Message> {
     match app.tab {
-        Tab::Changes => {
-            if let Some((path, lines)) = &app.blame {
-                diff_view::blame_view(path, lines)
-            } else {
-                diff_view::view(app.diff.as_ref(), app.selected.as_ref())
-            }
-        }
+        Tab::Changes => match (&app.blame, &app.repo) {
+            (Some((path, lines)), _) => diff_view::blame_view(path, lines),
+            (None, Some(open)) => diff_view::view(
+                &open.status,
+                app.diff.as_ref(),
+                app.selected.as_ref(),
+            ),
+            (None, None) => placeholder_vacio(),
+        },
         Tab::History => history::detail(app),
         Tab::PullRequests => prs::detail(app),
     }

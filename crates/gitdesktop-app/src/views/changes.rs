@@ -68,71 +68,55 @@ fn file_row<'a>(app: &'a App, entry: &'a FileEntry) -> Element<'a, Message> {
         .map(|(path, _)| path.as_str())
         == Some(entry.path.as_str());
 
-    // El nombre selecciona el archivo (su diff usa staged o no según la fila).
-    let name = button(text(entry.path.clone()).size(13).width(Fill))
-        .on_press(Message::FileSelected {
-            path: entry.path.clone(),
-            staged: entry.staged,
-        })
-        .padding([4, 4])
-        .width(Fill)
-        .style(theme::ghost);
-
-    let mut controls = row![
+    // Fila como GitHub Desktop: checkbox sencillo + ruta (una línea).
+    // Las acciones (descartar/editar) viven en el header del diff.
+    let row = row![
         checkbox(entry.staged)
-            .label(entry.path.clone())
             .size(15)
             .on_toggle(move |checked| Message::ToggleStaged {
                 path: entry.path.clone(),
                 staged: checked,
             }),
-        name,
-    ]
-    .spacing(6)
-    .align_y(Alignment::Center);
-
-    // En conflicto: editor embebido (canvas + jorgenio-core)…
-    if entry.status == gitdesktop_core::FileStatus::Conflicted {
-        controls = controls.push(
-            button(text("editar aquí").size(10).style(theme::notice))
-                .on_press(Message::EditConflictPressed {
-                    path: entry.path.clone(),
-                })
-                .padding([3, 6])
-                .style(theme::menu_item),
-        );
-        // …o abrir en Jorgenio Text como ventana propia.
-        controls = controls.push(
-            button(text("jorgenio ↗").size(10).style(theme::muted))
-                .on_press(Message::ResolveInEditor {
-                    path: entry.path.clone(),
-                })
-                .padding([3, 6])
-                .style(theme::menu_item),
-        );
-    }
-
-    // Descartar solo tiene sentido para cambios sin preparar.
-    if !entry.staged {
-        controls = controls.push(
-            button(text("descartar").size(10).style(theme::muted))
-                .on_press(Message::RequestDiscard {
-                    path: entry.path.clone(),
-                })
-                .padding([3, 6])
-                .style(theme::menu_item),
-        );
-    }
-
-    controls = controls.push(
+        button(
+            container(text(truncate_path(&entry.path, 28)).size(13))
+                .width(Fill)
+                .height(Length::Fixed(18.0))
+                .clip(true),
+        )
+        .on_press(Message::FileSelected {
+            path: entry.path.clone(),
+            staged: entry.staged,
+        })
+        .padding([2, 4])
+        .width(Fill)
+        .style(theme::ghost),
         text(entry.status.label())
             .size(11)
             .style(theme::muted)
-            .width(Length::Fixed(92.0))
+            .width(Length::Fixed(88.0))
             .align_x(alignment::Horizontal::Right),
-    );
+    ]
+    .spacing(10)
+    .padding([6, 8])
+    .align_y(Alignment::Center)
+    .width(Fill);
 
-    container_row(controls.width(Fill), is_selected)
+    container_row(row, is_selected)
+}
+
+/// Trunca rutas largas al estilo GitHub Desktop: inicio + … + final.
+fn truncate_path(path: &str, max: usize) -> String {
+    if path.chars().count() <= max {
+        return path.to_owned();
+    }
+    let head = 18;
+    let tail = max - head - 1;
+    let chars: Vec<char> = path.chars().collect();
+    format!(
+        "{}…{}",
+        chars[..head].iter().collect::<String>(),
+        chars[chars.len() - tail..].iter().collect::<String>()
+    )
 }
 
 fn container_row<'a>(
@@ -141,6 +125,7 @@ fn container_row<'a>(
 ) -> Element<'a, Message> {
     iced::widget::container(content)
         .width(Fill)
+        .height(Length::Fixed(40.0))
         .padding([2, 6])
         .style(theme::file_row(selected))
         .into()

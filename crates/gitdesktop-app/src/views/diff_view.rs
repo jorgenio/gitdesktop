@@ -10,12 +10,18 @@ use crate::theme;
 
 /// Vista principal del panel derecho para la pestaña Cambios.
 pub fn view<'a>(
+    status: &'a gitdesktop_core::RepoStatus,
     diff: Option<&'a Vec<DiffLine>>,
     selected: Option<&'a (String, bool)>,
 ) -> Element<'a, Message> {
     let Some((path, staged)) = selected else {
         return placeholder("Selecciona un archivo de la lista para ver su diff.");
     };
+
+    let entry = status
+        .entries
+        .iter()
+        .find(|entry| entry.path == *path && entry.staged == *staged);
 
     let Some(lines) = diff else {
         let hint = if *staged {
@@ -26,14 +32,44 @@ pub fn view<'a>(
         return placeholder(hint);
     };
 
+    // Acciones contextuales según el estado del archivo seleccionado.
+    let mut actions = row![
+        button(text("blame").size(11).style(theme::muted))
+            .on_press(Message::BlameRequested { path: path.clone() })
+            .padding([3, 8])
+            .style(theme::menu_item),
+    ]
+    .spacing(6);
+
+    if let Some(entry) = entry {
+        if entry.status == gitdesktop_core::FileStatus::Conflicted {
+            actions = actions.push(
+                button(text("editar aquí").size(11).style(theme::notice))
+                    .on_press(Message::EditConflictPressed { path: path.clone() })
+                    .padding([3, 8])
+                    .style(theme::menu_item),
+            );
+            actions = actions.push(
+                button(text("jorgenio ↗").size(11).style(theme::muted))
+                    .on_press(Message::ResolveInEditor { path: path.clone() })
+                    .padding([3, 8])
+                    .style(theme::menu_item),
+            );
+        } else if !entry.staged {
+            actions = actions.push(
+                button(text("descartar").size(11).style(theme::muted))
+                    .on_press(Message::RequestDiscard { path: path.clone() })
+                    .padding([3, 8])
+                    .style(theme::menu_item),
+            );
+        }
+    }
+
     column![
         container(
             row![
                 text(path.clone()).size(13).width(Fill),
-                button(text("blame").size(11).style(theme::muted))
-                    .on_press(Message::BlameRequested { path: path.clone() })
-                    .padding([2, 8])
-                    .style(theme::menu_item),
+                actions,
             ]
             .spacing(8)
             .align_y(iced::Alignment::Center),
